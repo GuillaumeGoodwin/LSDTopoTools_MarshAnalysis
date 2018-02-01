@@ -16,30 +16,6 @@ import cPickle
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # This is a new functions file
 
 
@@ -89,33 +65,780 @@ import scipy.ndimage as scim
 import cPickle as pickle
 
 
+import itertools
 
-
-
-def True_Outline (Raster, Raster_val, Outline_value, Nodata_value):
-
-    #Find a way to get a 1-pixel-wide outline
+##########################################################################################################
+##########################################################################################################
+def ENVI_raster_binary_to_2d_array(file_name):
+    """
+    This function transforms a raster into a numpy array.
     
-    Raster[Raster > 0 ] = 1
-    Raster_2 = np.zeros(Raster.shape, dtype = np.float)
-    Inside = np.where(Raster == 1)
+    Args:
+        file_name (ENVI raster): the raster you want to work on.
+        gauge (string): a name for your file
+    
+    Returns:
+        image_array (2-D numpy array): the array corresponding to the raster you loaded
+        pixelWidth (geotransform, inDs) (float): the size of the pixel corresponding to an element in the output array.
+    
+    Source: http://chris35wills.github.io/python-gdal-raster-io/
+    """ 
+
+    driver = gdal.GetDriverByName('ENVI')
+
+    driver.Register()
+
+    inDs = gdal.Open(file_name, GA_ReadOnly)
+
+    if inDs is None:
+        print "Couldn't open this file: " + file_name
+        print "Perhaps you need an ENVI .hdr file? "
+        sys.exit("Try again!")
+    else:
+        print "%s opened successfully" %file_name
+
+        print '~~~~~~~~~~~~~~'
+        print 'Get image size'
+        print '~~~~~~~~~~~~~~'
+        cols = inDs.RasterXSize
+        rows = inDs.RasterYSize
+        bands = inDs.RasterCount
+
+        print "columns: %i" %cols
+        print "rows: %i" %rows
+        print "bands: %i" %bands
+
+        print '~~~~~~~~~~~~~~'
+        print 'Get georeference information'
+        print '~~~~~~~~~~~~~~'
+        geotransform = inDs.GetGeoTransform()
+        originX = geotransform[0]
+        originY = geotransform[3]
+        pixelWidth = geotransform[1]
+        pixelHeight = geotransform[5]
+
+        print "origin x: %i" %originX
+        print "origin y: %i" %originY
+        print "width: %2.2f" %pixelWidth
+        print "height: %2.2f" %pixelHeight
+
+        # Set pixel offset.....
+        print '~~~~~~~~~~~~~~'
+        print 'Convert image to 2D array'
+        print '~~~~~~~~~~~~~~'
+        band = inDs.GetRasterBand(1)
+        image_array = band.ReadAsArray(0, 0, cols, rows)
+        image_array_name = file_name
+        print type(image_array)
+        print image_array.shape
+
+        return image_array, pixelWidth, (geotransform, inDs)
+
+
+
+##########################################################################################################
+##########################################################################################################
+def ENVI_raster_binary_from_2d_array(envidata, file_out, post, image_array):
+    """
+    This function transforms a numpy array into a raster.
+    
+    Args:
+        envidata: the geospatial data needed to create your raster
+        file_out (string): the name of the output file
+        post: coordinates for the goegraphical transformation
+        image_array (2-D numpy array): the input raster
+    
+    Returns:
+        new_geotransform
+        new_projection: the projection in which the raster
+        file_out (ENVI raster): the raster you wanted
+    
+    Source: http://chris35wills.github.io/python-gdal-raster-io/
+    """ 
+    driver = gdal.GetDriverByName('ENVI')
+
+    original_geotransform, inDs = envidata
+
+    rows, cols = image_array.shape
+    bands = 1
+
+    # Creates a new raster data source
+    outDs = driver.Create(file_out, cols, rows, bands, gdal.GDT_Float32)
+
+    # Write metadata
+    originX = original_geotransform[0]
+    originY = original_geotransform[3]
+
+    outDs.SetGeoTransform([originX, post, 0.0, originY, 0.0, -post])
+    outDs.SetProjection(inDs.GetProjection())
+
+    #Write raster datasets
+    outBand = outDs.GetRasterBand(1)
+    outBand.WriteArray(image_array)
+
+    new_geotransform = outDs.GetGeoTransform()
+    new_projection = outDs.GetProjection()
+
+    print "Output binary saved: ", file_out
+
+    return new_geotransform,new_projection,file_out
+
+
+
+##########################################################################################################
+##########################################################################################################
+def kernel (array, kernel_size, row_centre, col_centre):
+    """
+    This function defines a square kernel within an array (array), centred on (x_centre, y_centre). The is of a width of kernel_size.
+    Args:
+        array (2D numpy array): a 2-D array.
+        kernel_size (float): the width of the square defining the size of the kernel. kernel_size MUST be an ODD number to account for the central element.
+        x_centre (int): The index of the element in the 1st dimension.
+        y_centre (int): The index of the element in the 2nd dimension.
+
+    Returns:
+        kernel (2D numpy array): The kernel of selected elements.
+        kernel_row (2D numpy array): The kernel of row indices of the selected elements.
+        kernel_col (2D numpy array): The kernel of column indices of the selected elements.
+
+    Author: GCHG
+    """
+ 
+    if (-1)**kernel_size < 0:
+        row_to_0 = row_centre
+        row_to_End = len(array[:,0])-row_centre
+        col_to_0 = col_centre
+        col_to_End = len(array)-col_centre
+
+        Lim_top = row_centre - min(np.floor(kernel_size/2), row_to_0)
+        Lim_bottom = row_centre + min(np.floor(kernel_size/2)+1, row_to_End)
+        Lim_left = col_centre - min(np.floor(kernel_size/2), col_to_0)
+        Lim_right = col_centre + min(np.floor(kernel_size/2)+1, col_to_End)
+
+        kernel = array [int(Lim_top):int(Lim_bottom), int(Lim_left):int(Lim_right)]
+        kernel_row = np.arange(int(Lim_top),int(Lim_bottom))
+        kernel_col = np.arange(int(Lim_left),int(Lim_right))
+
+    else:
+        print
+        print " ... WARNING: you need to choose an odd kernel size, buddy"
+        print
+        pass
+
+    return kernel, kernel_row, kernel_col
+
+
+
+##########################################################################################################
+##########################################################################################################
+def Surface_outline (Outline_array, Surface_array, Outline_value):
+    """
+    This function calculates the inner outline of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
+        
+    Author: GCHG
+    """
+    
+    Surface_array[Surface_array > 0. ] = 1
+    Inside = np.where(Surface_array == 1)
     for i in range(len(Inside[0])):
         x = Inside[0][i]; y = Inside[1][i]
-        K = kernel (Raster, 3, x, y)    
+        K, Kx, Ky = kernel (Surface_array, 3, x, y)    
         if np.count_nonzero(K) <=  K.size-1 :
-            Raster_2[x, y] = Outline_value
-    
-    Raster_3 = np.copy(Raster_2)       
-    Outline = np.where (Raster_2 > 0)
+            Outline_array[x, y] = Outline_value
+
+    Twin = np.copy(Outline_array)
+    Outline = np.where (Twin > 0)
+
     for i in range(len(Outline[0])):
         x = Outline[0][i]; y = Outline[1][i]
-        K_r = kernel (Raster, 3, x, y)
-        K = kernel (Raster_2, 3, x, y)
+        K_r, Kx_r, Ky_r = kernel (Surface_array, 3, x, y)
+        K, Kx, Ky = kernel (Twin, 3, x, y)
         if np.sum(K_r) == 0:
-            print 'By the sea, Mr. Todd'
-            Raster_3[x, y] = 0
+            Outline_array[x, y] = 0
 
-    return Raster_3
+    return Outline_array
+
+
+
+
+
+
+##########################################################################################################
+##########################################################################################################
+#def Closest_neighbour (Kernel_array, Occupied_cells):
+    """
+    This function calculates the length of a single line of connected cells in an Outline_array and returns lists of x,y coordinates (Line_x, Line_y) and length values (Line_dist) of the cells along the line.
+    
+    
+    There's a labeled array and a storage array
+    
+    of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
+        
+    Author: GCHG
+    """
+
+
+
+
+
+##########################################################################################################
+##########################################################################################################
+def Line_length (Length_array, Labels_array, Label_value, Scale):
+    """
+    This function calculates the length of a single line of connected cells in an Outline_array and returns lists of x,y coordinates (Line_x, Line_y) and length values (Line_dist) of the cells along the line.
+    
+    
+    There's a labeled array and a storage array
+    
+    of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
+        
+    Author: GCHG
+    """
+
+    #Length_array = Labels_array.copy()
+
+    kernel_size = 3
+    
+    Elements = np.where(Length_array == Label_value)
+    num_elements = len (Elements[0])
+
+    # initialise lists of coordinates and length
+    Line_row = []; Line_col = []; Line_dist = []
+    
+    if num_elements > 0:
+
+        #Add the the first point's coordinates to the lists (first = closest to the origin)
+        Line_row.append(Elements[0][0])
+        Line_col.append(Elements[1][0])
+        Line_dist.append(0.001*Scale) # the 0.001 is very important
+
+        #Change the lengths array to include the new distance
+        Length_array [Line_row[-1], Line_col[-1]] = Line_dist[-1]
+
+        for t in range(1, num_elements): 
+            #Find the coordinates of the last point added
+            row = Line_row[-1]; col = Line_col[-1]
+
+            #Make a kernel around that point
+            K_lab, Kr_lab, Kc_lab = kernel (Labels_array, kernel_size, row, col)
+            K_len, Kr_len, Kc_len = kernel (Length_array, kernel_size, row, col)
+
+            #This is where the Kernel contains un-distanced but labelled line values
+            Next_points = np.where(np.logical_and(K_lab == Label_value, K_len == Label_value))
+
+            if len(Next_points[0]) > 0:
+                for i in range(len(Next_points[0])):
+                    #These are the coordinats of the candidates in the big array
+                    ROW = Kr_lab[Next_points[0]]; COL = Kc_lab[Next_points[1]]
+
+                    #This is the distance between the candidates and the centre
+                    Dist_to_previous = np.sqrt((ROW-row)**2+(COL-col)**2) 
+                    #We select the closest one to make sure we get all the points
+                    Selected_next = np.where (Dist_to_previous == np.amin(Dist_to_previous[Dist_to_previous>0]))
+
+                    #Now we add these values to our list
+                    Next_row = ROW[Selected_next[0][0]]; Line_row.append(Next_row)
+                    Next_col = COL[Selected_next[0][0]]; Line_col.append(Next_col)
+
+                    Next_dist = Line_dist[-1] + Dist_to_previous[Selected_next[0][0]]; Line_dist.append(Next_dist)
+
+                    #Change the lengths array to include the new distance
+                    Length_array [Next_row, Next_col] = Next_dist
+
+                    break
+
+        Filled_elements = len(Line_dist)
+
+        #print len(Line_dist), '/', num_elements,' elements used'
+        
+    #print 'This value is complete' 
+ 
+    #print 'after operation'
+    
+    #np.set_printoptions(precision=3)
+    #print 'Labels, '
+    #print Labels_array
+    #print
+    #print 'Length, '
+    #print Length_array
+    
+
+    
+    return Length_array, Line_row, Line_col, Line_dist, Filled_elements
+    #return Length_array, Line_row, Line_col, Line_dist
+
+
+
+
+
+##########################################################################################################
+##########################################################################################################
+def Stitched_lines_length (Labels_array, Label_value, Nodata_value):
+    """
+    This function calculates the length of several connected lines of connected cells in an Outline_array and returns lists of x,y coordinates (Line_x, Line_y) and length values (Line_dist) of the cells along the line.
+    
+    
+    There's a labeled array and a storage array
+    
+    of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
+        
+    Author: GCHG
+    """
+    
+    Length_array = Labels_array.copy()
+        
+    Elements = np.where(Labels_array == Label_value)
+    num_elements = len (Elements[0])
+    print ' This label has ', num_elements, ' elements'
+
+    Lines_row = []; Lines_col = []; Lines_dist = []
+
+    Filled_total = 0
+
+    while Filled_total < num_elements:
+        # Calculate the length of each squiggly line (which may stop abruptly)
+        Length_array, Line_row, Line_col, Line_dist, Filled_elements = Line_length (Length_array, Labels_array, Label_value, 1)
+
+        #add to the lists of all the line coordinates and lengths
+        Lines_row.append(Line_row); Lines_col.append(Line_col); Lines_dist.append(Line_dist)
+        
+        Filled_total = Filled_total + Filled_elements
+        print '  Number of filled elements: ', Filled_total, '/', num_elements
+
+    #for i in range(len(Lines_row)):
+        #for j in range(len(Lines_row[i])):
+            #Length_array[Lines_row[i][j], Lines_col[i][j]] = Lines_dist[i][j]
+            
+            
+            
+
+    #Stitch the squiggly connected lines into one long line
+    
+    
+    
+    
+    
+    np.set_printoptions(precision=3)
+    print 'Labels, '
+    print Labels_array
+    print
+    print 'Length, '
+    print Length_array
+
+    
+    # Plotting !!!!!
+    
+    
+    
+    from matplotlib.lines import Line2D 
+    
+    fig=plt.figure('title', facecolor='White',figsize=[20.,20.])
+
+    ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=2)    
+    ax1.tick_params(axis='x', colors='black')
+    ax1.tick_params(axis='y', colors='black')
+    
+
+    Vmin = min(np.amin(Length_array[Length_array!=Nodata_value])*0.95, np.amin(Length_array[Length_array!=Nodata_value])*1.05)
+    Vmax = max(np.amax(Length_array)*0.95, np.amax(Length_array)*1.05)
+
+    Map = ax1.imshow(Length_array, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+    ax2 = fig.add_axes([0.1, 0.98, 0.85, 0.02])
+    scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
+    cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
+    
+    for i in range(len(Lines_row)):
+        Line = Line2D(Lines_col[i], Lines_row[i], color = plt.cm.gist_earth(5), alpha = 0.5)
+        ax1.add_line(Line)
+    plt.savefig('/home/s1563094/Datastore/Software/LSDTopoTools/LSDTopoTools_MarshAnalysis/Example_Data/Output/Figures/'+'TEST'+'.png')
+
+    
+    
+    
+    STOP
+    
+    return Lengths_array
+    
+    
+    
+    
+    """Bigline_row = []; Bigline_col = []; Bigline_dist = []
+
+    # Find the line number of the closest starting point to the x-edge (top wall)
+    min_x_dist = []
+    for i in range(len(Lines_x)):
+        min_x_dist.append(Lines_x[i][0]**2)
+        min_x_dist.append(Lines_x[i][-1]**2)
+
+    A = np.where (min_x_dist == min(min_x_dist)) [0][0]
+    print 'Start - line number:', A, 'distance:', np.sqrt(min(min_x_dist)) 
+    # Add this line to the Bigline
+    if (-1)**A >0:
+        print 'Start - coordinates: x = ', Lines_x[A/2][0], ', y = ', Lines_y[A/2][0]
+        for i in range(len(Lines_x[A/2])):
+            Bigline_x.append(Lines_x[A/2][i])
+            Bigline_y.append(Lines_y[A/2][i])
+            Bigline_dist.append(Lines_dist[A/2][i])
+        Lines_x.remove(Lines_x[A/2])
+        Lines_y.remove(Lines_y[A/2])
+        Lines_dist.remove(Lines_dist[A/2])
+    else:
+        # Be careful to reorder the Bigline by inverting the distances
+        A = A+1
+        print 'Start - coordinates: x = ', Lines_x[A/2][-1], ', y = ', Lines_y[A/2][-1]
+        for i in range(len(Lines_x[(A)/2])-1, 0, -1):
+            Bigline_x.append(Lines_x[A/2][i])
+            Bigline_y.append(Lines_y[A/2][i])
+            Bigline_dist.append(Lines_dist[A/2][len(Lines_x[(A)/2])-1-i])
+        Lines_x.remove(Lines_x[A/2])
+        Lines_y.remove(Lines_y[A/2])
+        Lines_dist.remove(Lines_dist[A/2])
+
+    print 'End - coordinates: x = ', Bigline_x[-1], ', y = ', Bigline_y[-1]
+    print 'End - distance: d = ', Bigline_dist[-1]
+
+
+    #for all the next bits:
+    while len(Bigline_x) < num_elements:
+        print 'Bigline length = ', len(Bigline_x), '/', num_elements
+        # Find the closest starting point to the origin
+        min_square_dist = []
+        for i in range(len(Lines_x)):
+            x_prev = Bigline_x[-1]
+            y_prev = Bigline_y[-1]
+            dist_prev = Bigline_dist[-1]
+
+            head_dist = (Lines_x[i][0]-x_prev)**2+(Lines_y[i][0]-y_prev)**2
+            tail_dist = (Lines_x[i][-1]-x_prev)**2+(Lines_y[i][-1]-y_prev)**2
+            min_square_dist.append(head_dist)
+            min_square_dist.append(tail_dist) 
+
+        A = np.where (min_square_dist == min(min_square_dist)) [0][0]
+        print 'Next start - line number:', A, 'distance:', np.sqrt(min(min_square_dist)) 
+        print 'Next start - distance: d = ', Bigline_dist[-1]
+        # Add this line to the Bigline
+        if (-1)**A >0:
+            print 'Next start - coordinates: x = ', Lines_x[A/2][0], ', y = ', Lines_y[A/2][0]
+
+
+            figure out why they don't save the same thing...s
+            print len(Lines_x[A/2])
+            print len(Lines_y[A/2])
+            print len(Lines_dist[A/2])
+
+            for i in range(len(Lines_x[A/2])):
+                Bigline_x.append(Lines_x[A/2][i])
+                Bigline_y.append(Lines_y[A/2][i])
+                Bigline_dist.append(Lines_dist[A/2][i] + dist_prev + min(min_square_dist))
+            Lines_x.remove(Lines_x[A/2])
+            Lines_y.remove(Lines_y[A/2])
+            Lines_dist.remove(Lines_dist[A/2])
+        else:
+            # Be careful to reorder the Bigline by inverting the distances
+            A = A+1
+            print 'Next start - coordinates: x = ', Lines_x[A/2][-1], ', y = ', Lines_y[A/2][-1]
+            for i in range(len(Lines_x[(A)/2])-1, 0, -1):
+                Bigline_x.append(Lines_x[A/2][i])
+                Bigline_y.append(Lines_y[A/2][i])
+                Bigline_dist.append(Lines_dist[A/2][len(Lines_x[(A)/2])-1-i]+dist_prev+min(min_square_dist))
+            Lines_x.remove(Lines_x[A/2])
+            Lines_y.remove(Lines_y[A/2])
+            Lines_dist.remove(Lines_dist[A/2])
+        print 'End - coordinates: x = ', Bigline_x[-1], ', y = ', Bigline_y[-1]
+        print 'End - distance: d = ', Bigline_dist[-1]
+            
+        for i in range(len(Bigline_x)):
+            array_2[Bigline_x[i], Bigline_y[i]] = Bigline_dist[i]
+        
+        break
+     
+     
+    
+    return array_2"""
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+    
+    
+##########################################################################################################
+##########################################################################################################
+def Stitch_lines (Lines_row, Lines_col, Lines_dist):
+    """
+    This function stitches several squiggly lines, in the form of lists of coordinates, into one big squiggly line ^^
+    
+    
+    This function takes all the short lines and makes them into loads of massive lines
+    
+    
+    There's a labeled array and a storage array
+    
+    of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
+        
+    Author: GCHG
+    """
+    
+    Bigline_row = []; Bigline_col = []; Bigline_dist = []
+
+    # Find the line number of the closest starting point to the x-edge (top wall)
+    min_x_dist = []
+    for i in range(len(Lines_x)):
+        min_x_dist.append(Lines_x[i][0]**2)
+        min_x_dist.append(Lines_x[i][-1]**2)
+
+    A = np.where (min_x_dist == min(min_x_dist)) [0][0]
+    print 'Start - line number:', A, 'distance:', np.sqrt(min(min_x_dist)) 
+    # Add this line to the Bigline
+    if (-1)**A >0:
+        print 'Start - coordinates: x = ', Lines_x[A/2][0], ', y = ', Lines_y[A/2][0]
+        for i in range(len(Lines_x[A/2])):
+            Bigline_x.append(Lines_x[A/2][i])
+            Bigline_y.append(Lines_y[A/2][i])
+            Bigline_dist.append(Lines_dist[A/2][i])
+        Lines_x.remove(Lines_x[A/2])
+        Lines_y.remove(Lines_y[A/2])
+        Lines_dist.remove(Lines_dist[A/2])
+    else:
+        # Be careful to reorder the Bigline by inverting the distances
+        A = A+1
+        print 'Start - coordinates: x = ', Lines_x[A/2][-1], ', y = ', Lines_y[A/2][-1]
+        for i in range(len(Lines_x[(A)/2])-1, 0, -1):
+            Bigline_x.append(Lines_x[A/2][i])
+            Bigline_y.append(Lines_y[A/2][i])
+            Bigline_dist.append(Lines_dist[A/2][len(Lines_x[(A)/2])-1-i])
+        Lines_x.remove(Lines_x[A/2])
+        Lines_y.remove(Lines_y[A/2])
+        Lines_dist.remove(Lines_dist[A/2])
+
+    print 'End - coordinates: x = ', Bigline_x[-1], ', y = ', Bigline_y[-1]
+    print 'End - distance: d = ', Bigline_dist[-1]
+
+
+    #for all the next bits:
+    while len(Bigline_x) < num_elements:
+        print 'Bigline length = ', len(Bigline_x), '/', num_elements
+        # Find the closest starting point to the origin
+        min_square_dist = []
+        for i in range(len(Lines_x)):
+            x_prev = Bigline_x[-1]
+            y_prev = Bigline_y[-1]
+            dist_prev = Bigline_dist[-1]
+
+            head_dist = (Lines_x[i][0]-x_prev)**2+(Lines_y[i][0]-y_prev)**2
+            tail_dist = (Lines_x[i][-1]-x_prev)**2+(Lines_y[i][-1]-y_prev)**2
+            min_square_dist.append(head_dist)
+            min_square_dist.append(tail_dist) 
+
+        A = np.where (min_square_dist == min(min_square_dist)) [0][0]
+        print 'Next start - line number:', A, 'distance:', np.sqrt(min(min_square_dist)) 
+        print 'Next start - distance: d = ', Bigline_dist[-1]
+        # Add this line to the Bigline
+        if (-1)**A >0:
+            print 'Next start - coordinates: x = ', Lines_x[A/2][0], ', y = ', Lines_y[A/2][0]
+
+
+            
+            
+            
+            
+            
+            
+            """figure out why they don't save the same thing...s"""
+            print len(Lines_x[A/2])
+            print len(Lines_y[A/2])
+            print len(Lines_dist[A/2])
+
+            for i in range(len(Lines_x[A/2])):
+                Bigline_x.append(Lines_x[A/2][i])
+                Bigline_y.append(Lines_y[A/2][i])
+                Bigline_dist.append(Lines_dist[A/2][i] + dist_prev + min(min_square_dist))
+            Lines_x.remove(Lines_x[A/2])
+            Lines_y.remove(Lines_y[A/2])
+            Lines_dist.remove(Lines_dist[A/2])
+        else:
+            # Be careful to reorder the Bigline by inverting the distances
+            A = A+1
+            print 'Next start - coordinates: x = ', Lines_x[A/2][-1], ', y = ', Lines_y[A/2][-1]
+            for i in range(len(Lines_x[(A)/2])-1, 0, -1):
+                Bigline_x.append(Lines_x[A/2][i])
+                Bigline_y.append(Lines_y[A/2][i])
+                Bigline_dist.append(Lines_dist[A/2][len(Lines_x[(A)/2])-1-i]+dist_prev+min(min_square_dist))
+            Lines_x.remove(Lines_x[A/2])
+            Lines_y.remove(Lines_y[A/2])
+            Lines_dist.remove(Lines_dist[A/2])
+        print 'End - coordinates: x = ', Bigline_x[-1], ', y = ', Bigline_y[-1]
+        print 'End - distance: d = ', Bigline_dist[-1]
+            
+        for i in range(len(Bigline_x)):
+            array_2[Bigline_x[i], Bigline_y[i]] = Bigline_dist[i]
+        
+        break
+     
+     
+    
+    return array_2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def Polyline_length (Labels_array, Label_value, Scale):
+
+    
+    print 'This is the label value: ', Label_value 
+    
+    Elements = np.where(Labels_array == Label_value)
+    num_elements = len (Elements[0])
+    Used_elements = 0
+    
+    print 'This label has ', num_elements, ' elements'
+    
+    
+    while Used_elements < num_elements:
+        
+        Remaining_elements = np.where(Labels_array == Label_value)
+        num_remaining = len (Remaining_elements[0])
+    
+
+
+        Length_array, Line_row, Line_col, Line_dist
+
+
+
+
+            
+    """for j in range(len(Previous_points[0])):
+        X=New_points[0][i]; Y=New_points[1][i]
+        Xp=Previous_points[0][j]; Yp=Previous_points[1][j]
+
+        Dist_to_previous = np.sqrt((X-Xp)**2+(Y-Yp)**2)   
+
+
+
+        if Dist_to_previous <= np.sqrt(2):
+
+            Distance = np.sqrt((X-1)**2+(Y-1)**2)
+
+            Line_x.append(x+X-1)
+            Line_y.append(y+Y-1)
+            Line_dist.append(Line_dist[-1]+Distance)
+
+            array_2 [Line_x[-1], Line_y[-1]] = Line_dist[-1]
+
+
+    print 'so far so good'
+
+    #Add the other points' coordinates to the lists
+    for t in range(1, num_elements): 
+        print 'iterating', t
+        # Latest coordinate stored
+        x = Line_x[-1]; y = Line_y[-1]
+        K_lab = kernel (Labels_array, kernel_size, x, y)
+        K_len = kernel (Length_array, kernel_size, x, y)
+
+        print K_lab
+
+        #if K_lab.size == kernel_size**2:
+
+
+        New_points = np.where(K_lab == Label_value)
+        Old_points = np.where(K_lab == Line_dist[-2])
+
+        if len(New_points[0]) > 0:
+
+            print 'New points can be added'
+
+            for i in range(len(New_points[0])):
+                for j in range(len(Sea_points[0])):
+                    X=New_points[0][i]; Y=New_points[1][i]
+                    #Xs=Sea_points[0][j]; Ys=Sea_points[1][j]
+
+                    #Dist_to_sea = np.sqrt((X-Xs)**2+(Y-Ys)**2)   
+                    #if Dist_to_sea <= np.sqrt(2):
+
+                        #print 'Distance is right'
+
+                    Distance = np.sqrt((X-1)**2+(Y-1)**2)
+
+                    Line_x.append(x+X-1)
+                    Line_y.append(y+Y-1)
+                    Line_dist.append(Line_dist[-1]+Distance)
+
+                    Length_array [Line_x[-1], Line_y[-1]] = Line_dist[-1]
+
+                    print 'appended'"""
+
+
 
 
 
@@ -290,81 +1013,6 @@ def Measure_polyline_length (array, Nodata_value):
 
 
 
-
-
-
-
-
-def Measure_line_length (array, array_2, val, Nodata_value):
-    num_elements = len (np.where(array == val)[0])
-    if num_elements > 0:
-
-        # initialise
-        Line_x = []
-        Line_y = []
-        Line_dist = []
-        
-        #first point
-        Line_x.append(np.where(np.logical_and(array == val, array_2==0))[0][0])
-        Line_y.append(np.where(np.logical_and(array == val, array_2==0))[1][0])
-        Line_dist.append(0.01)
-        array_2 [Line_x[-1], Line_y[-1]] = Line_dist[-1]
-        
-
-        #second point
-        x = Line_x[0]; y = Line_y[0]
-        kernel_size = 3
-        K = kernel (array, kernel_size, x, y)
-        K_2 = kernel (array_2, kernel_size, x, y)
-
-        if K.size == kernel_size**2:
-            New_points = np.where(np.logical_and(K == val, K_2 == 0))
- 
-            Sea_points = np.where(K == 0)
-            if len(New_points[0]) > 0:
-                for i in range(len(New_points[0])):
-                    for j in range(len(Sea_points[0])):
-                        X=New_points[0][i]; Y=New_points[1][i]
-                        Xs=Sea_points[0][j]; Ys=Sea_points[1][j]
-                        
-                        Dist_to_sea = np.sqrt((X-Xs)**2+(Y-Ys)**2)   
-                        if Dist_to_sea <= np.sqrt(2):
-                            
-                            Distance = np.sqrt((X-1)**2+(Y-1)**2)
-                            
-                            Line_x.append(x+X-1)
-                            Line_y.append(y+Y-1)
-                            Line_dist.append(Line_dist[-1]+Distance)
-                            
-                            array_2 [Line_x[-1], Line_y[-1]] = Line_dist[-1]
-            
-        for t in range(1,1000):           
-            x = Line_x[-1]; y = Line_y[-1]
-            kernel_size = 3
-            K = kernel (array, kernel_size, x, y)
-            K_2 = kernel (array_2, kernel_size, x, y)
-
-            if K.size == kernel_size**2:
-                New_points = np.where(np.logical_and(K == val, K_2 == 0))
-
-                Sea_points = np.where(K == 0)
-                if len(New_points[0]) > 0:
-                    for i in range(len(New_points[0])):
-                        for j in range(len(Sea_points[0])):
-                            X=New_points[0][i]; Y=New_points[1][i]
-                            Xs=Sea_points[0][j]; Ys=Sea_points[1][j]
-
-                            Dist_to_sea = np.sqrt((X-Xs)**2+(Y-Ys)**2)   
-                            if Dist_to_sea <= np.sqrt(2):
-                                Distance = np.sqrt((X-1)**2+(Y-1)**2)
-
-                                Line_x.append(x+X-1)
-                                Line_y.append(y+Y-1)
-                                Line_dist.append(Line_dist[-1]+Distance)
-                                              
-                                array_2 [Line_x[-1], Line_y[-1]] = Line_dist[-1]
-
-    return array_2, Line_x, Line_y, Line_dist
 
 
 
@@ -757,123 +1405,7 @@ def Open_tide_stats (file_location, gauge):
 
 
 
-#---------------------------------------------------------------
-def ENVI_raster_binary_to_2d_array(file_name, gauge):
-    """
-    This function transforms a raster into a numpy array.
-    
-    Args:
-        file_name (ENVI raster): the raster you want to work on.
-        gauge (string): a name for your file
-    
-    Returns:
-        image_array (2-D numpy array): the array corresponding to the raster you loaded
-        pixelWidth (geotransform, inDs) (float): the size of the pixel corresponding to an element in the output array.
-    
-    Source: http://chris35wills.github.io/python-gdal-raster-io/
-    """ 
-    
-    
-    print 'Opening %s' % (gauge)
 
-    driver = gdal.GetDriverByName('ENVI')
-
-    driver.Register()
-
-    inDs = gdal.Open(file_name, GA_ReadOnly)
-
-    if inDs is None:
-        print "Couldn't open this file: " + file_name
-        print "Perhaps you need an ENVI .hdr file? "
-        sys.exit("Try again!")
-    else:
-        print "%s opened successfully" %file_name
-
-        #print '~~~~~~~~~~~~~~'
-        #print 'Get image size'
-        #print '~~~~~~~~~~~~~~'
-        cols = inDs.RasterXSize
-        rows = inDs.RasterYSize
-        bands = inDs.RasterCount
-
-        #print "columns: %i" %cols
-        #print "rows: %i" %rows
-        #print "bands: %i" %bands
-
-        #print '~~~~~~~~~~~~~~'
-        #print 'Get georeference information'
-        #print '~~~~~~~~~~~~~~'
-        geotransform = inDs.GetGeoTransform()
-        originX = geotransform[0]
-        originY = geotransform[3]
-        pixelWidth = geotransform[1]
-        pixelHeight = geotransform[5]
-
-        #print "origin x: %i" %originX
-        #print "origin y: %i" %originY
-        #print "width: %2.2f" %pixelWidth
-        #print "height: %2.2f" %pixelHeight
-
-        # Set pixel offset.....
-        print '~~~~~~~~~~~~~~'
-        print 'Convert image to 2D array'
-        print '~~~~~~~~~~~~~~'
-        band = inDs.GetRasterBand(1)
-        image_array = band.ReadAsArray(0, 0, cols, rows)
-        image_array_name = file_name
-        print type(image_array)
-        print image_array.shape
-
-        return image_array, pixelWidth, (geotransform, inDs)
-
-
-
-
-#---------------------------------------------------------------------
-def ENVI_raster_binary_from_2d_array(envidata, file_out, post, image_array):
-    """
-    This function transforms a numpy array into a raster.
-    
-    Args:
-        envidata: the geospatial data needed to create your raster
-        file_out (string): the name of the output file
-        post: coordinates for the goegraphical transformation
-        image_array (2-D numpy array): the input raster
-    
-    Returns:
-        new_geotransform
-        new_projection: the projection in which the raster
-        file_out (ENVI raster): the raster you wanted
-    
-    Source: http://chris35wills.github.io/python-gdal-raster-io/
-    """ 
-    driver = gdal.GetDriverByName('ENVI')
-
-    original_geotransform, inDs = envidata
-
-    rows, cols = image_array.shape
-    bands = 1
-
-    # Creates a new raster data source
-    outDs = driver.Create(file_out, cols, rows, bands, gdal.GDT_Float32)
-
-    # Write metadata
-    originX = original_geotransform[0]
-    originY = original_geotransform[3]
-
-    outDs.SetGeoTransform([originX, post, 0.0, originY, 0.0, -post])
-    outDs.SetProjection(inDs.GetProjection())
-
-    #Write raster datasets
-    outBand = outDs.GetRasterBand(1)
-    outBand.WriteArray(image_array)
-
-    new_geotransform = outDs.GetGeoTransform()
-    new_projection = outDs.GetProjection()
-
-    print "Output binary saved: ", file_out
-
-    return new_geotransform,new_projection,file_out
 
 
 
@@ -1028,41 +1560,7 @@ def define_search_space (DEM, Slope, Nodata_value, opt):
 
 
 #-----------------------------------------------------------------------------------------------------
-def kernel (array, kernel_size, x_centre, y_centre):
-    """
-    This function defines a square kernel within an array (array), centred on (x_centre, y_centre). The is of a width of kernel_size.
-    Args:
-        array (2D numpy array): a 2-D array.
-        kernel_size (float): the width of the square defining the size of the kernel. kernel_size MUST be an ODD number to account for the central element.
-        x_centre (int): The index of the element in the 1st dimension.
-        y_centre (int): The index of the element in the 2nd dimension.
 
-    Returns:
-        kernel (2D numpy array): The kernel of selected elements.
-
-    Author: GCHG
-    """
- 
-    if (-1)**kernel_size < 0:
-        X_to_0 = x_centre
-        X_to_End = len(array)-x_centre
-        Y_to_0 = y_centre
-        Y_to_End = len(array[0,:])-y_centre
-
-        Lim_left = x_centre - min(np.floor(kernel_size/2), X_to_0)
-        Lim_right = x_centre + min(np.floor(kernel_size/2)+1, X_to_End)
-        Lim_top = y_centre - min(np.floor(kernel_size/2), Y_to_0)
-        Lim_bottom = y_centre + min(np.floor(kernel_size/2)+1, Y_to_End)
-
-        kernel = array [int(Lim_left):int(Lim_right), int(Lim_top):int(Lim_bottom)]
-
-    else:
-        print
-        print " ... WARNING: you need to choose an odd kernel size, buddy"
-        print
-        pass
-
-    return kernel
 
 
 #-----------------------------------------------------------------------------------------------------
@@ -1664,4 +2162,31 @@ def Confusion (Subject, Reference, Nodata_value):
 
 
     return Confusion_matrix, Performance, Metrix
+
+
+
+"""def True_Outline (Raster, Raster_val, Outline_value, Nodata_value):
+
+    #Find a way to get a 1-pixel-wide outline
+    
+    Raster[Raster > 0 ] = 1
+    Raster_2 = np.zeros(Raster.shape, dtype = np.float)
+    Inside = np.where(Raster == 1)
+    for i in range(len(Inside[0])):
+        x = Inside[0][i]; y = Inside[1][i]
+        K = kernel (Raster, 3, x, y)    
+        if np.count_nonzero(K) <=  K.size-1 :
+            Raster_2[x, y] = Outline_value
+    
+    Raster_3 = np.copy(Raster_2)       
+    Outline = np.where (Raster_2 > 0)
+    for i in range(len(Outline[0])):
+        x = Outline[0][i]; y = Outline[1][i]
+        K_r = kernel (Raster, 3, x, y)
+        K = kernel (Raster_2, 3, x, y)
+        if np.sum(K_r) == 0:
+            print 'By the sea, Mr. Todd'
+            Raster_3[x, y] = 0
+
+    return Raster_3"""
 

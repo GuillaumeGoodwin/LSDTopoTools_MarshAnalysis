@@ -26,7 +26,6 @@ import os
 
 from LSDMOA_classes import *
 
-
 from LSDMOA_functions import ENVI_raster_binary_to_2d_array
 from LSDMOA_functions import ENVI_raster_binary_from_2d_array
 #from LSDMOA_functions import MARSH_ID
@@ -59,12 +58,27 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
     # Set the value for empty DEM cells
     Nodata_value = -1000
 
+    
+    
+    ######
+    #TEST ZONE STARTS
+    ######
+
+
+    ######
+    #TEST ZONE ENDS
+    ######  
+    
+    
+    
+
     for site in Site:
         print("Loading input data from site: "+site)
         # NB: When loading input data, please make sure the naming convention shown here is respected.
         
         print(" Loading DEM")
-        DEM, post_DEM, envidata_DEM =  ENVI_raster_binary_to_2d_array (Input_dir+"%s_DEM.bil" % (site), site)
+        DEM_fname = site+"_DEM.bil"
+        DEM, post_DEM, envidata_DEM =  ENVI_raster_binary_to_2d_array (Input_dir+DEM_fname)
         print DEM.shape
         
         print " Loading Slopes"
@@ -72,7 +86,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         slope_fname = site+"_slope.bil"
         if not os.path.isfile(Input_dir+slope_fname):
             slope_fname = site+"_SLOPE.bil"   
-        Slope, post_Slope, envidata_Slope =  ENVI_raster_binary_to_2d_array (Input_dir+slope_fname, site)
+        Slope, post_Slope, envidata_Slope =  ENVI_raster_binary_to_2d_array (Input_dir+slope_fname)
         print Slope.shape
         
         print " Loading Curvature"
@@ -80,35 +94,62 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         curv_fname = site+"_curv.bil"
         if not os.path.isfile(Input_dir+curv_fname):
             curv_fname = site+"_CURV.bil"   
-        Curv, post_Curv, envidata_Curv =  ENVI_raster_binary_to_2d_array (Input_dir+curv_fname, site)
+        Curv, post_Curv, envidata_Curv =  ENVI_raster_binary_to_2d_array (Input_dir+curv_fname)
         print Curv.shape
         
         print " Loading Marsh Platform"
         # Make sure we have the right slope file name
         marsh_fname = site+"_Marsh.bil"
-        Marsh, post_Marsh, envidata_Marsh =  ENVI_raster_binary_to_2d_array (Input_dir+marsh_fname, site)
+        Marsh, post_Marsh, envidata_Marsh =  ENVI_raster_binary_to_2d_array (Input_dir+marsh_fname)
         print Marsh.shape
         
   
+        #DEM = DEM [700:1300,100:600]
+        #Marsh = Marsh [700:1300,100:600]
 
-
+        
+        DEM = DEM [700:800,100:200]
+        Marsh = Marsh [700:800,100:200]
 
         # Here begins the actual MOA
-        print "Running the analysis"
+        print "\nRunning the analysis"
         
         #Make a proper object for the marsh
-        Marsh_object = Marsh_platform(Marsh.shape[0], Marsh.shape[1])
-        Marsh_Platform = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)
-        Marsh_Platform.save_plot(Output_dir+'Figures/', 'The One Name', 'Sous-fifre', Nodata_value)
-        
-        print Marsh_Platform.calc_area(Nodata_value)
-        
-        #Make the Outline
-        
+        Marsh_object = 0 * Marsh_platform(Marsh.shape[0], Marsh.shape[1])
+        Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)    
+        Marsh_object.plot_map(Output_dir+'Figures/', '01_Marsh', 'Sous-fifre', Nodata_value)       
 
+        #Marsh_labelled = Marsh_object.label_connected (Nodata_value)
+        #Marsh_labelled.plot_map(Output_dir+'Figures/', '02_Marsh_lab', 'Sous-fifre', Nodata_value)       
+
+        #Make the Outline
+        Outline_object = 0 * Marsh_outline(Marsh.shape[0], Marsh.shape[1])
+        Outline_object.extract_outline_from_array (Marsh_object)
+        Outline_object.plot_map(Output_dir+'Figures/', '02_Line', 'Sous-fifre', Nodata_value)
+
+        #Label the connected components
+        Outline_labels = Outline_object.label_connected (Nodata_value)
+        #Outline_labels.plot_map(Output_dir+'Figures/', '03_Labeled_Line', 'Sous-fifre', Nodata_value)
+
+        Outline_lengths = Outline_labels.calc_outline_length ()
+        Outline_lengths.plot_map(Output_dir+'Figures/', '04_Lengths_line', 'Sous-fifre', Nodata_value)
+        
+        
+        
+        
+        
+        
+        
         STOP
         
         
+        
+        
+        
+        
+        
+        
+
         
         
         

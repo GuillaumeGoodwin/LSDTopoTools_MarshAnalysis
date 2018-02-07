@@ -103,48 +103,85 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Marsh, post_Marsh, envidata_Marsh =  ENVI_raster_binary_to_2d_array (Input_dir+marsh_fname)
         print Marsh.shape
         
+        
+        #DEM = DEM [850:1050,230:430]
+        #Marsh = Marsh [850:1050,230:430]
   
         #DEM = DEM [700:1300,100:600]
         #Marsh = Marsh [700:1300,100:600]
 
         
-        DEM = DEM [700:800,100:200]
-        Marsh = Marsh [700:800,100:200]
+        
+          
+        """Marsh = np.ones((50,50), dtype = np.float)
+        
+        from random import randint
+        
+        DEM = np.ones((50,50), dtype = np.float)
+        for i in range(len(DEM)):
+            for j in range(len(DEM[0])):
+                DEM[i,j] = DEM[i,j] * randint(1,5)
+        
+        # Modify the marsh
+        Marsh[0:30,:] = 0
+        Marsh[0:20,0:15] = 1
+        Marsh[30:,20] = 0
+        Marsh[4:26,25:48] = 1
+        Marsh[12:14,30:48] = 0
+        Marsh[38:40,40:45] = 0
+        Marsh[31:32, 4:8] = 0
+        Marsh[8, 14:15] = 0
+        Marsh[7:9, 13] = 0
+        Marsh[6:11, 5:13] = 0"""
+        
 
         # Here begins the actual MOA
         print "\nRunning the analysis"
         
         #Make a proper object for the marsh
-        Marsh_object = 0 * Marsh_platform(Marsh.shape[0], Marsh.shape[1])
-        Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)    
-        Marsh_object.plot_map(Output_dir+'Figures/', '01_Marsh', 'Sous-fifre', Nodata_value)       
+        Marsh_object = Marsh_platform(Marsh.shape[0], Marsh.shape[1])
+        Marsh_object = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True) 
+        Marsh_DEM = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = False) 
+        Marsh_labels = Marsh_object.label_connected (Nodata_value)
+        
 
-        #Marsh_labelled = Marsh_object.label_connected (Nodata_value)
-        #Marsh_labelled.plot_map(Output_dir+'Figures/', '02_Marsh_lab', 'Sous-fifre', Nodata_value)       
-
-        #Make the Outline
-        Outline_object = 0 * Marsh_outline(Marsh.shape[0], Marsh.shape[1])
-        Outline_object.extract_outline_from_array (Marsh_object)
-        Outline_object.plot_map(Output_dir+'Figures/', '02_Line', 'Sous-fifre', Nodata_value)
-
-        #Label the connected components
+        #Make a proper object for the outline
+        Outline_object = 0*Marsh_outline(Marsh.shape[0], Marsh.shape[1])
+        Outline_object, Outline_value = Outline_object.extract_outline_from_array (Marsh_object)  
         Outline_labels = Outline_object.label_connected (Nodata_value)
-        #Outline_labels.plot_map(Output_dir+'Figures/', '03_Labeled_Line', 'Sous-fifre', Nodata_value)
+        
+        #Now simplify the line
+        Outline_simple = Outline_labels.reduce_to_marsh_labels (Marsh_labels, Nodata_value)
+        
+        # Now calculate the lengths
+        Outline_length = Outline_simple.calc_outline_length (1)
+        
+        # Show results of a circular kernel
+        #Outlines, Outlines_row, Outlines_col = Outline_labels.vectorise(Nodata_value)
+        #Outline_buffer = Outline_object.swath (Outline_value, Nodata_value)
+        
+        # Plot the things
+        Marsh_object.plot_map(Output_dir+'Figures/', '00_Marsh_object', 'Sous-fifre', Nodata_value)  
+        Marsh_DEM.plot_map(Output_dir+'Figures/', '01_Marsh_DEM', 'Sous-fifre', Nodata_value)  
+        Marsh_labels.plot_map(Output_dir+'Figures/', '02_Marsh_Labels', 'Sous-fifre', Nodata_value)  
+        Outline_object.plot_map(Output_dir+'Figures/', '03_Outline_object', 'Sous-fifre', Nodata_value)
+        Outline_labels.plot_map(Output_dir+'Figures/', '04_Outline_labels', 'Sous-fifre', Nodata_value)
+        Outline_simple.plot_map(Output_dir+'Figures/', '05_Outline_simple', 'Sous-fifre', Nodata_value)
+        Outline_length.plot_map(Output_dir+'Figures/', '06_Outline_length', 'Sous-fifre', Nodata_value)
+        
+        
+        
+        # FOR SWATHS, USE THiS
+        
+        # https://gis.stackexchange.com/questions/50108/elevation-profile-10-km-each-side-of-a-line
 
-        Outline_lengths = Outline_labels.calc_outline_length ()
-        Outline_lengths.plot_map(Output_dir+'Figures/', '04_Lengths_line', 'Sous-fifre', Nodata_value)
+
+
+        sys.exit()
         
         
         
-        
-        
-        
-        
-        STOP
-        
-        
-        
-        
+
         
         
         

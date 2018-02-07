@@ -31,52 +31,60 @@ class Land_surface (np.ndarray):
         self.X_length = x_length
         self.Y_length = y_length
         self[np.isnan(self)] = 0
+        self = 0 * self
         
+    # We have no copy method because the ndarray.copy method is good enough
         
-    def copy(self):
-        twin = self
-        return twin
-        
-    def set_attribute (self, select_array, select_value, array, Nodata_value, classification = False):
+    def set_attribute (self, select_array, select_value, attribute_array, Nodata_value, classification = False):
+        new_array = self.copy()
+
         Select = np.where (select_array >= select_value)
         Discard = np.where (np.logical_and(select_array < select_value, select_array != Nodata_value))
-        Nodata = np.where (array == Nodata_value)
+        Nodata = np.where (attribute_array == Nodata_value)
         
-        self[Discard] = 0
-        self[Nodata] = Nodata_value
+        new_array[Discard] = 0
+        new_array[Nodata] = Nodata_value
         
         if classification == False:
-            self[Select] = array [Select]
+            new_array[Select] = attribute_array [Select]
         else:
-            self[Select] = 1
+            new_array[Select] = select_value
 
-        return self
+        return new_array
     
     
     def label_connected (self, Nodata_value):
+        new_array = self.copy()
+        Ref = self.copy()
+        
         import scipy.ndimage as scim
-        Twin = np.copy(self)
         array, numfeat = scim.label(self)
         
         for value in np.arange(1, np.amax(array)+1, 1):
             line = np.where(array == value)
-            self[line] = value 
-            self[Twin == Nodata_value] = Nodata_value 
+            new_array[line] = value 
+            new_array[Ref == Nodata_value] = Nodata_value 
 
-        return self
+        return new_array
         
      
     def plot_map (self, save_dir, figname, title, Nodata_value):
-        fig=plt.figure(title, facecolor='White',figsize=[np.floor(self.shape[1])/10,np.floor(self.shape[0])/10])
+        print ' Plotplotplotplot'
+        twin  = self.copy()
+        
+        fig_height = min(np.floor(twin.shape[1])/5, 50)
+        fig_width = min(np.floor(twin.shape[1])/5, 50)
+        
+        fig=plt.figure(title, facecolor='White',figsize=[fig_height,fig_width])
 
         ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=2)    
         ax1.tick_params(axis='x', colors='black')
         ax1.tick_params(axis='y', colors='black')
         
-        Vmin = min(np.amin(self[self!=Nodata_value])*0.95, np.amin(self[self!=Nodata_value])*1.05)
-        Vmax = max(np.amax(self)*0.95, np.amax(self)*1.05)
+        Vmin = min(np.amin(twin[twin!=Nodata_value])*0.95, np.amin(twin[twin!=Nodata_value])*1.05)
+        Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
 
-        Map = ax1.imshow(self, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+        Map = ax1.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
         ax2 = fig.add_axes([0.1, 0.98, 0.85, 0.02])
         scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
         cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
@@ -95,9 +103,14 @@ class Marsh_platform (Land_surface):
         self.X_length = x_length
         self.Y_length = y_length
         self[np.isnan(self)] = 0
+        self = 0 * self
         
-    def calc_area (self, Nodata_value):
-        return np.count_nonzero(self[self!=Nodata_value])
+        
+    def calc_labelled_area (self, label_value):
+        Selected = np.where(self == label_value)
+        Labelled_area = len(Selected[0])
+
+        return Labelled_area
     
         
         
@@ -112,27 +125,63 @@ class Marsh_outline (Land_surface):
         self.X_length = x_length
         self.Y_length = y_length
         self[np.isnan(self)] = 0
+        self = 0 * self
         
-    def extract_outline_from_array (self, array):        
-        self = fct.Surface_outline (self, array, 2)
-        return self
-      
-    def calc_outline_length (self):
+    def extract_outline_from_array (self, array): 
+        print ' Extracting outline...'
+        new_array = self.copy()
+        new_array, Outline_value = fct.Surface_outline (self, array, 2)
+        
+        return new_array, Outline_value
+    
+    
+    
+    def reduce_to_marsh_labels (self, Marsh_labels, Nodata_value):
+        print ' Reducing outline...'
+        
+        new_array = 0 * self.copy()
+        
+        # This one relies on the fact that the longest continuous line should be the marsh outline for each label
+        
+        # Find out how many marsh labels you have
+        M_Labels = range (int(np.amin(Marsh_labels[Marsh_labels>0])), int(np.amax(Marsh_labels[Marsh_labels>0]))+1, 1)
+    
+        # Find out how many outline labels you have
+        L_Labels = range (int(np.amin(self[self>0])), int(np.amax(self[self>0]))+1, 1)
 
-        self = np.asarray([[0.,0.,0.,0.,1.,0.,0.,0.],
-                           [0.,0.,0.,0.,1.,0.,0.,0.],
-                           [0.,0.,1.,0.,1.,1.,1.,1.],
-                           [0.,0.,1.,1.,0.,1.,0.,1.],
-                           [0.,1.,0.,1.,0.,1.,0.,1.],
-                           [0.,1.,1.,0.,0.,1.,1.,0.],
-                           [0.,0.,0.,0.,0.,1.,0.,0.],
-                           [0.,0.,0.,0.,1.,0.,1.,1.],
-                           [0.,0.,0.,1.,0.,0.,0.,0.],], dtype = np.float)
-        
-        
-        print self
-        
+        # Make a list counting the elements for each label. The 0 index is for the label value, the 1 index is for the number of elements
+        Num_Elements = [[],[]]
+        for label in L_Labels:
+            Elements = np.where(self == label)
+            num_elements = len (Elements[0])
+            Num_Elements[0].append(label); Num_Elements[1].append(num_elements)
+ 
 
+        for i in range(len(M_Labels)):
+            # If the label has a non-negligible area
+            Labelled_area = Marsh_labels.calc_labelled_area (M_Labels[i])
+            
+            if Labelled_area >1 :
+                Most_pop_index = np.where(np.asarray(Num_Elements[1])==max(np.asarray(Num_Elements[1])))[0]
+                Most_pop_label = Num_Elements[0][Most_pop_index]
+                new_array[self == Most_pop_label] = Most_pop_label
+
+                # Mow remove it.
+                del Num_Elements[0][Most_pop_index]; del Num_Elements[1][Most_pop_index]
+
+
+        return new_array
+        
+  
+
+
+
+        
+    def calc_outline_length (self, Scale):
+        print ' Calculating outline length'
+        new_array = self.copy()
+        
+        
         #Start lists of coordinates and distances
         #Lines_row = []; Lines_col = []; Lines_dist = []
         
@@ -141,22 +190,21 @@ class Marsh_outline (Land_surface):
 
         #And loop through thev alues
         for lab in range(len(Labels)):
-            print 'This is the label: ', lab+1, '/', len(Labels), ' (', Labels[lab], ')'
+            
+            #new_array = self.copy()
+            
+            print '\nThis is the label: ', lab+1, '/', len(Labels), ' (', Labels[lab], ')'
 
             # Measure the length of the stitched line for this label value
-            self, Line_row, Line_col, Line_dist = fct.Stitched_lines_length (self, Labels[lab], 1)
+            #for i in [1,3]:
+            new_array = fct.Stitched_lines_length (new_array, Labels[lab], Scale)
+            #new_array, Line_row, Line_col, Line_dist = fct.Stitched_lines_length (new_array, Labels[lab], 1)
          
             #Lines_row.append (Line_row); Lines_col.append (Line_col); Lines_dist.append (Line_dist)
         
             #NOW WE NEED TO STITCH ALL THIS TOGETHER
             
-        
-        
-            
-            
-            
-            
-            
+
             #print 'Da number of elements'
             #print len(Line_row)
             
@@ -191,7 +239,7 @@ class Marsh_outline (Land_surface):
 
             #self, Line_x, Line_y, Line_dist = fct.Longest_line_length (self, val, 1)
 
-        return self
+        return new_array
    
 
 
@@ -203,6 +251,21 @@ class Marsh_outline (Land_surface):
 
 
 
+    def swath (self, Buffer_around, Nodata_value):
+        new_array = self.copy()
+
+        Select = np.where(self == Buffer_around)
+
+        for i in range(len(Select[0])):
+            porthole_row, porthole_col, porthole_dist = fct.porthole (self, 3, Select[0][i], Select[1][i])
+
+            new_array[porthole_row,porthole_col] = porthole_dist
+                
+
+
+        return new_array
+    
+     
 
 
 
@@ -398,7 +461,48 @@ class Marsh_outline (Land_surface):
 
     return array_2"""
     
+    def vectorise (self, Nodata_value):
+        from matplotlib.lines import Line2D
         
+        Outlines = []; Outlines_row = []; Outlines_col = []
+
+        Labels = range (int(np.amin(self[self>0])), int(np.amax(self[self>0]))+1, 1)
+        
+        for lab in range(len(Labels)):
+            Select = np.where (self == lab)
+            
+            Line_row = Select[0]; Line_col = Select[1]
+            Line = Line2D(Line_col, Line_row)
+
+            Outlines_row.append(Line_row); Outlines_col.append(Line_col)
+            Outlines.append(Line)
+            
+        
+        
+        twin  = self.copy()
+        
+        fig=plt.figure('title', facecolor='White',figsize=[np.floor(twin.shape[1])/5,np.floor(twin.shape[0])/5])
+
+        ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=2)    
+        ax1.tick_params(axis='x', colors='black')
+        ax1.tick_params(axis='y', colors='black')
+        
+        Vmin = min(np.amin(twin[twin!=Nodata_value])*0.95, np.amin(twin[twin!=Nodata_value])*1.05)
+        Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
+
+        Map = ax1.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+        ax2 = fig.add_axes([0.1, 0.98, 0.85, 0.02])
+        scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
+        cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
+
+        
+        for Line in Outlines:
+            ax1.add_line(Line)
+        
+        plt.savefig('/home/s1563094/Datastore/Software/LSDTopoTools/LSDTopoTools_MarshAnalysis/Example_Data/Output/Figures/'+'TEST'+'.png')
+        
+        
+        return Outlines, Outlines_row, Outlines_col  
         
 ######################################################
 

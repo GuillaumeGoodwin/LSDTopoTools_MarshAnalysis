@@ -74,7 +74,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
 
 
     for site in Site:
-        print("Loading input data from site: "+site)
+        """print("Loading input data from site: "+site)
         # NB: When loading input data, please make sure the naming convention shown here is respected.
 
         print(" Loading DEM")
@@ -108,13 +108,13 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         #DEM = DEM [850:1050,230:430]
         #Marsh = Marsh [850:1050,230:430]
 
-        #DEM = DEM [700:1300,100:600]
-        #Marsh = Marsh [700:1300,100:600]
+        DEM = DEM [700:1300,100:600]
+        Marsh = Marsh [700:1300,100:600]"""
 
 
 
 
-        """Marsh = np.ones((50,50), dtype = np.float)
+        Marsh = np.ones((50,50), dtype = np.float)
 
         from random import randint
 
@@ -130,7 +130,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Marsh[4:26,25:48] = 1
         Marsh[12:14,30:48] = 0
         Marsh[38:40,40:45] = 0
-        Marsh[31:32, 4:8] = 0
+        Marsh[31, 6:10] = 0
         Marsh[8, 14:15] = 0
         Marsh[7:9, 13] = 0
         Marsh[6:11, 5:13] = 0
@@ -142,7 +142,9 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Marsh[29, 29] = 1
         Marsh[29, 35] = 1
         Marsh[18, 5:9] = 0
-        Marsh[20:27, 41] = 0"""
+        Marsh[20:27, 41] = 0
+        Marsh[2:7, 25:30] = 1
+        Marsh[30:35, 0] = 0
 
 
 
@@ -189,7 +191,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Outline_trimmed.plot_map(Output_dir+'Figures/', '06_Outline_trimmed', 'Sous-fifre', Nodata_value)
         Outline_length.plot_map(Output_dir+'Figures/', '07_Outline_length', 'Sous-fifre', Nodata_value)
 
-        plot_lines_on_basemap(Lines_row, Lines_col, Lines_dist, Lines_code, Outline_length, Output_dir+'Figures/', '08_Lines', Nodata_value)
+        plot_lines_on_basemap(Lines_row, Lines_col, Lines_dist, Lines_code, Outline_length, Output_dir+'Figures/', '08_Lines_2Rules', Nodata_value)
 
         #Outline_shortest_length.plot_map(Output_dir+'Figures/', '07_Outline_short_length', 'Sous-fifre', Nodata_value)
 

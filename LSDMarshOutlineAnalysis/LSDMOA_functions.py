@@ -9,8 +9,10 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-from osgeo import gdal, osr, gdalconst
-from osgeo.gdalconst import *
+#from osgeo import gdal, osr, gdalconst
+#import gdal
+
+#from osgeo.gdalconst import *
 import cPickle
 
 
@@ -39,9 +41,9 @@ from pylab import *
 import functools
 
 import itertools as itt
-from osgeo import gdal, osr
-from osgeo import gdal, gdalconst
-from osgeo.gdalconst import *
+#from osgeo import gdal, osr
+#from osgeo import gdal, gdalconst
+#from osgeo.gdalconst import *
 from copy import copy
 
 
@@ -55,7 +57,7 @@ from mpl_toolkits.axes_grid1.inset_locator import *
 import matplotlib.gridspec as gridspec
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from mpl_toolkits.basemap import Basemap, cm
+#from mpl_toolkits.basemap import Basemap, cm
 from matplotlib.patches import Rectangle
 import matplotlib.lines as mlines
 import matplotlib.patches as mpatches
@@ -563,6 +565,9 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, Lines_row,
 
     Author: GCHG
     """
+    print "We are looking for divergent line starts"
+
+
     kernel_size = 3
 
     Indices_to_clean = []
@@ -611,89 +616,154 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, Lines_row,
                     # Find the code associated to those two points
                     First_line_code = Code_array[First_line_row, First_line_col]; Second_line_code = Code_array[Second_line_row, Second_line_col]
                     # Select the two lines that go with these codes
-                    First_line_index = np.where(Lines_code == First_line_code); Second_line_index = np.where(Lines_code == Second_line_code)
+                    First_line_index = np.where(Lines_code == First_line_code)[0][0]; Second_line_index = np.where(Lines_code == Second_line_code)[0][0]
                     # Reverse the second line (arbitrary)
-                    Lines_row[Second_line_index[0]] = list(reversed(np.asarray(Lines_row[Second_line_index[0]])))
-                    Lines_col[Second_line_index[0]] = list(reversed(np.asarray(Lines_col[Second_line_index[0]])))
+                    Lines_row[Second_line_index] = list(reversed(np.asarray(Lines_row[Second_line_index])))
+                    Lines_col[Second_line_index] = list(reversed(np.asarray(Lines_col[Second_line_index])))
 
                     #Make sure it's not one of those short lines
-                    if len(Lines_dist[Second_line_index[0]]) > 1:
+                    if len(Lines_dist[Second_line_index]) > 1:
                         # Add the extra distance values to the first line
-                        Lines_dist[First_line_index[0]] = (np.asarray(Lines_dist[First_line_index[0]]) + Lines_dist[Second_line_index[0]][-1] + Distance).tolist()
+                        Lines_dist[First_line_index] = (np.asarray(Lines_dist[First_line_index]) + Lines_dist[Second_line_index][-1] + Distance).tolist()
                         # Stitch the lines
-                        Lines_dist[Second_line_index[0]] = Lines_dist[Second_line_index[0]] + Lines_dist[First_line_index[0]]
-                        Lines_row[Second_line_index[0]] = Lines_row[Second_line_index[0]] + Lines_row[First_line_index[0]]
-                        Lines_col[Second_line_index[0]] = Lines_col[Second_line_index[0]] + Lines_col[First_line_index[0]]
+                        Lines_dist[Second_line_index] = Lines_dist[Second_line_index] + Lines_dist[First_line_index]
+                        Lines_code[Second_line_index] = Lines_code[First_line_index]
+                        Lines_row[Second_line_index] = Lines_row[Second_line_index] + Lines_row[First_line_index]
+                        Lines_col[Second_line_index] = Lines_col[Second_line_index] + Lines_col[First_line_index]
                         # Update the length array
-                        Length_array[Lines_row[Second_line_index[0]], Lines_col[Second_line_index[0]]] = Lines_dist[Second_line_index[0]]
+                        Length_array[Lines_row[Second_line_index], Lines_col[Second_line_index]] = Lines_dist[Second_line_index]
 
-                        Indices_to_clean.append(First_line_index[0])
+                        Indices_to_clean.append(First_line_index)
 
     #Now rid of the lines that have become redundant
 
-    print 'These are the lines we worked with'
-    print Lines_row[i], Lines_col[i], Lines_dist[i], Lines_code[i]
+    #print 'These are the lines we worked with'
+    #print Lines_row[i], Lines_col[i], Lines_dist[i], Lines_code[i]
     for i in Indices_to_clean:
         del Lines_row[i]; del Lines_col[i]; del Lines_dist[i]; del Lines_code[i]
 
-    print 'These are the lines now'
-    print Lines_row[i], Lines_col[i], Lines_dist[i], Lines_code[i]
-    
+    #print 'These are the lines now'
+    #print Lines_row[i], Lines_col[i], Lines_dist[i], Lines_code[i]
+
     return Length_array, Lines_row, Lines_col, Lines_dist, Lines_code
 
 
 
 ##########################################################################################################
 ##########################################################################################################
-"""def Graft_diverging_branch (Length_array, Labels_array, Label_value, Lines_row, Lines_col, Lines_dist, Lines_code, Scale):"""
-"""
-This function stitches lines that start at neighbouring points
+def Graft_diverging_branch (Length_array, Labels_array, Label_value, Lines_row, Lines_col, Lines_dist, Lines_code, Code_array, Scale):
+    """
+    This function stitches a line that has its starting point in contact with another line that is already on its way.
 
-There's a labeled array and a storage array
+    There's a labeled array and a storage array
 
-of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
-Args:
-    Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
-    Outline_array (2D numpy array): a 2-D array destined to store the outline.
-    Outline_value (float): The value to be given to outline cells
-    Nodata_value (float): The value for empty cells
+    of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
 
-Returns:
-    Outline_array (2D numpy array): a 2-D array populated with the outline cells.
+    Returns:
+        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
 
-Author: GCHG
-"""
+    Author: GCHG
+    """
+
+    print "We are looking for diverging branches"
+
+    kernel_size = 3
+
+    Indices_to_clean = []
+
+    # For each line
+    for i in range(len(Lines_row)):
+        #If this is not a 1-pixel-long line:
+        if len(Lines_row[i])>1:
+            # Find the starting point
+            Startpoint_row = Lines_row[i][0]; Startpoint_col = Lines_col[i][0]
+            # Make kernels around the starting point
+            sK_lab, sKr_lab, sKc_lab = kernel (Labels_array, kernel_size, Startpoint_row, Startpoint_col)
+            sK_len, sKr_len, sKc_len = kernel (Length_array, kernel_size, Startpoint_row, Startpoint_col)
+            sK_cod, sKr_cod, sKc_cod = kernel (Code_array, kernel_size, Startpoint_row, Startpoint_col)
+            #Also find its end point
+            Endpoint_row = Lines_row[i][-1]; Endpoint_col = Lines_col[i][-1]
+            # Make kernels around the end point
+            eK_lab, eKr_lab, eKc_lab = kernel (Labels_array, kernel_size, Endpoint_row, Endpoint_col)
+            eK_len, eKr_len, eKc_len = kernel (Length_array, kernel_size, Endpoint_row, Endpoint_col)
+            eK_cod, eKr_cod, eKc_cod = kernel (Code_array, kernel_size, Endpoint_row, Endpoint_col)
+            # Also retrieve the line's code
+            This_line_code = Code_array[Startpoint_row, Startpoint_col]
+
+            print This_line_code
+            print Lines_code
+            print np.where(Lines_code == This_line_code)
+
+            This_line_code_index = np.where(Lines_code == This_line_code)[0][0]
 
 
+            #There is something wrong when we update the code.... Fix this!!!!!!
 
-"""else:
-print '......this line was born in the wake of another'
-# Find the connecting line code
-Smallest_dist_code = np.amin(sK_cod[np.where(sK_len == Smallest_dist)])
-# Find the coordinates and distance of this point.
-Selected_row = sKr_len[Smallest_dist_index[0][0]]; Selected_col = sKc_len[Smallest_dist_index[1][0]]
-#Find out how far aprt they are
-Distance = np.sqrt((Selected_row-Startpoint_row)**2 + (Selected_col-Startpoint_col)**2)
-# Find the line with the right code
-Code_index = np.where(Lines_code == Smallest_dist_code)[0]
-# Find the right distance along that line
-Distance_index = np.where(Lines_dist[Code_index] == Smallest_dist)[0]
-# If it indeed exists
-if len(Distance_index) > 0:
-#Prepare to append
-Dist_to_append = Lines_dist[Code_index][0:Distance_index+1]
-Row_to_append = Lines_row[Code_index][0:Distance_index+1]
-Col_to_append = Lines_col[Code_index][0:Distance_index+1]
-#If there's something to append
-if len(Dist_to_append) > 1:
-#Add the correct distances
-Lines_dist[This_line_code_index] = (np.asarray(Lines_dist[This_line_code_index]) + Dist_to_append[-1] + Distance).tolist()
-# Stitch the lines
-Lines_dist[This_line_code_index] = Dist_to_append + Lines_dist[This_line_code_index]
-Lines_row[This_line_code_index] = Row_to_append + Lines_row[This_line_code_index]
-Lines_col[This_line_code_index] = Col_to_append + Lines_col[This_line_code_index]
-#Update the length array
-Length_array[Lines_row[This_line_code_index], Lines_col[This_line_code_index]] = Lines_dist[This_line_code_index]"""
+
+            #Tell something to the confused user
+            print '\nLine starts (', Startpoint_row, Startpoint_col, ').', 'Code is :' , This_line_code
+            print '....Line ends (', Endpoint_row, Endpoint_col, '). Length is :' , Length_array[Endpoint_row, Endpoint_col]
+
+            # Record where the length kernel is non-null AND has a different line code.
+            # This is a connecting line
+            Touches_start = np.where(np.logical_and(sK_len > 0, sK_cod.astype(int) != int(This_line_code)))
+            Touches_end = np.where(np.logical_and(eK_len > 0, eK_cod.astype(int) != int(This_line_code)))
+
+            # If it's connected at the start
+            if len(sK_len[Touches_start[:][0]]) > 0 and np.count_nonzero(sK_cod[Touches_start[:][0]]) > 0 :
+                print '.....This line connects to another at its starting point.'
+                # Find the smallest distance in that subset and where it is in the array
+                Smallest_dist = np.amin (sK_len[Touches_start]); Smallest_dist_index = np.where(sK_len == Smallest_dist)
+                # Find the connecting line code
+                Smallest_dist_code = np.amin(sK_cod[np.where(sK_len == Smallest_dist)])
+
+                # If the shortest distance is NOT  beginning of a line:
+                if Smallest_dist > 0.001*Scale:
+                    print '......this line was born in the wake of another'
+
+                    # Find the coordinates and distance of this point.
+                    Selected_row = sKr_len[Smallest_dist_index[0][0]]; Selected_col = sKc_len[Smallest_dist_index[1][0]]
+
+                    #Find out how far aprt they are
+                    Distance = np.sqrt((Selected_row-Startpoint_row)**2 + (Selected_col-Startpoint_col)**2)
+                    # Find the line with the right code
+                    Code_index = np.where(Lines_code == Smallest_dist_code)[0][0]
+                    # Find the right distance along that line
+                    Distance_index = np.where(Lines_dist[Code_index] == Smallest_dist)[0][0]
+                    # If it indeed exists
+                    if len(np.where(Lines_dist[Code_index] == Smallest_dist)[0]) > 0:
+                        #Prepare to append the other line
+
+                        print Distance_index+1
+
+                        Dist_to_append = Lines_dist[Code_index][0:Distance_index+1]
+                        Row_to_append = Lines_row[Code_index][0:Distance_index+1]
+                        Col_to_append = Lines_col[Code_index][0:Distance_index+1]
+                        #If there's something to append
+                        if len(Dist_to_append) > 1:
+                            #Add the correct distances
+
+                            print This_line_code_index
+
+                            Lines_dist[This_line_code_index] = (np.asarray(Lines_dist[This_line_code_index]) + Dist_to_append[-1] + Distance).tolist()
+                            # Stitch the lines
+                            Lines_dist[This_line_code_index] = Dist_to_append + Lines_dist[This_line_code_index]
+                            Lines_row[This_line_code_index] = Row_to_append + Lines_row[This_line_code_index]
+                            Lines_col[This_line_code_index] = Col_to_append + Lines_col[This_line_code_index]
+                            #Update the length array
+                            Length_array[Lines_row[This_line_code_index], Lines_col[This_line_code_index]] = Lines_dist[This_line_code_index]
+
+                            #print Lines_row
+                            #print Lines_col
+
+                            #print Lines_code
+
+    return Length_array, Lines_row, Lines_col, Lines_dist, Lines_code
 
 #If it's connected at the end
 """if len(eK_len[Touches_end[:][0]]) > 0 and np.count_nonzero(eK_cod[Touches_end[:][0]]) > 0 :

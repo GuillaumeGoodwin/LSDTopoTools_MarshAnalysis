@@ -11,7 +11,7 @@ Example_Plots.py
 """
 
 
-#------------------------------------------------------------------
+"""#------------------------------------------------------------------
 #0. Set up display environment in putty if you are working on a terminal with no graphical interface.
 import matplotlib
 matplotlib.use('Agg')
@@ -53,7 +53,7 @@ import matplotlib.patches as mpatches
 import timeit
 #------------------------------------------------------------------
 # Import the marsh-finding functions
-from LSDMOA_functions import *
+from LSDMOA_functions import *"""
 
 #------------------------------------------------------------------
 #2. Set up the important variables
@@ -72,17 +72,17 @@ Sites = ["FEL"]
 # Set the value for empty DEM cells
 Nodata_value = -9999
 
-def Plot_platform_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/", 
+def Plot_platform_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Sites = ["FEL"]):
     """
     This plots the extracted marsh platform on a hillshade
-    
+
     Args:
         Input_dir (str): Name your data input directory
         Output_dir (str): Name your results output directory
         Sites (str list): A list of strings. The file names are modified based on these sites
-        
+
     Author: GCHG
     """
     #Plot 1: Draw the platform on a DEM, superimposed on a hillshade
@@ -112,20 +112,20 @@ def Plot_platform_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPla
         plt.savefig(Output_dir+'Platform_DEM_%s.png' % (site))
 
 
-        
-        
-        
-def Plot_Elevation_PDF(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/", 
+
+
+
+def Plot_Elevation_PDF(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Sites = ["FEL"]):
     """
     This plots the extracted marsh platform on a hillshade
-    
+
     Args:
         Input_dir (str): Name your data input directory
         Output_dir (str): Name your results output directory
         Sites (str list): A list of strings. The file names are modified based on these sites
-        
+
     Author: GCHG
     """
     #Plot 1: Draw the platform on a DEM, superimposed on a hillshade
@@ -145,7 +145,7 @@ def Plot_Elevation_PDF(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Ex
         bins_z, hist_z = Distribution (DEM, Nodata_value)
         bins_M, hist_M = Distribution (Platform, Nodata_value)
 
-        Elevation_range_z = np.arange(min(bins_z[bins_z!=Nodata_value]), max(bins_z), 0.1)    
+        Elevation_range_z = np.arange(min(bins_z[bins_z!=Nodata_value]), max(bins_z), 0.1)
         Elevation_range_M = np.arange(min(bins_z[bins_z!=Nodata_value]), max(bins_M), 0.1)
         Ratio = (max(hist_z[hist_z < 0.2])/max(hist_M[hist_M < 0.2]))
         hist_z_copy = hist_z / Ratio
@@ -153,9 +153,9 @@ def Plot_Elevation_PDF(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Ex
 
 
         ax1.fill_between( bins_z, -5, hist_z_copy, color=plt.cm.gray(0), alpha = 0.5, linewidth = 0.0)
-        ax1.plot( bins_M, hist_M, '-r', linewidth = 2.0) 
+        ax1.plot( bins_M, hist_M, '-r', linewidth = 2.0)
 
-    
+
         # Set the ticks
         A = 0.01
         #for x in range(len(hist_M)-1):
@@ -173,28 +173,28 @@ def Plot_Elevation_PDF(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Ex
         #majorLocator2 = MultipleLocator(1)
         #ax1.xaxis.set_major_locator(majorLocator2)
 
-        
-        plt.savefig(Output_dir+'Elevation_PDF_%s.png' % (site))
-        
 
-        
-        
-        
-        
-def Plot_marsh_outline_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/", 
+        plt.savefig(Output_dir+'Elevation_PDF_%s.png' % (site))
+
+
+
+
+
+
+def Plot_marsh_outline_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Sites = ["FEL"]):
     """
     This draws the marsh outline on a DEM, superimposed on a hillshade.
-    
+
     Args:
         Input_dir (str): Name your data input directory.
         Output_dir (str): Name your results output directory.
         Sites (str list): A list of strings. The file names are modified based on these sites.
-        
+
     Author: GCHG
     """
-    
+
     for site in Sites:
         fig=plt.figure(2, facecolor='White',figsize=[10,10])
         ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=1)
@@ -226,17 +226,17 @@ def Plot_marsh_outline_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_Mar
     plt.savefig(Output_dir+'Platform_outline_%s.png' % (site))
 
 
-def Plot_marsh_reference_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/", 
+def Plot_marsh_reference_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Sites = ["FEL"]):
     """
     This draws the marsh reference on a hillshade
-    
+
     Args:
         Input_dir (str): Name your data input directory.
         Output_dir (str): Name your results output directory.
         Sites (str list): A list of strings. The file names are modified based on these sites.
-        
+
     Author: GCHG
     """
     #Plot 3: Draw the marsh map and reference outline, superimposed on a hillshade
@@ -278,17 +278,17 @@ def Plot_marsh_reference_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_M
 
 
 
-def Plot_confusion_map_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/", 
+def Plot_confusion_map_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Sites = ["FEL"]):
     """
     This draws the marsh reference on a hillshade
-    
+
     Args:
         Input_dir (str): Name your data input directory.
         Output_dir (str): Name your results output directory.
         Sites (str list): A list of strings. The file names are modified based on these sites.
-        
+
     Author: GCHG
     """
     #Plot 4: Draw the confusion map, superimposed on a hillshade
@@ -316,6 +316,3 @@ def Plot_confusion_map_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_Mar
 
 
     plt.savefig(Output_dir+'Confusion_%s.png' % (site))
-
-
-

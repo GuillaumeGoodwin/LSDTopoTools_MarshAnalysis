@@ -9,9 +9,9 @@ import os
 import sys
 import numpy as np
 
-from osgeo import gdal, osr, gdalconst
+#from osgeo import gdal, osr, gdalconst
 import matplotlib.pyplot as plt
-from osgeo.gdalconst import *
+#from osgeo.gdalconst import *
 import cPickle
 
 import matplotlib
@@ -176,7 +176,10 @@ class Marsh_outline (Land_surface):
             Labelled_area = Marsh_labels.calc_labelled_area (M_Labels[i])
 
             if Labelled_area >1 :
-                Most_pop_index = np.where(np.asarray(Num_Elements[1])==max(np.asarray(Num_Elements[1])))[0]
+                Most_pop_index = np.where(np.asarray(Num_Elements[1])==max(np.asarray(Num_Elements[1])))[0][0]
+
+                #print Most_pop_index
+
                 Most_pop_label = Num_Elements[0][Most_pop_index]
                 new_array[self == Most_pop_label] = Most_pop_label
 
@@ -228,7 +231,11 @@ class Marsh_outline (Land_surface):
             # Measure the length of the stitched line for this label value
             new_array, Line_row, Line_col, Line_dist, Line_code, Code_array = fct.Measure_all_lines (new_array, Labels[lab], Scale)
             #Stitch the diverging starts
+            print 
             new_array, Line_row, Line_col, Line_dist, Line_code = fct.Stitch_diverging_starts (new_array, Labels_array, Labels[lab], Line_row, Line_col, Line_dist, Line_code, Code_array, Scale)
+            print
+            #Stitch outward going branches
+            new_array, Line_row, Line_col, Line_dist, Line_code = fct.Graft_diverging_branch (new_array, Labels_array, Labels[lab], Line_row, Line_col, Line_dist, Line_code, Code_array, Scale)
 
 
             Lines_row.append (Line_row); Lines_col.append (Line_col); Lines_dist.append (Line_dist); Lines_code.append (Line_code)

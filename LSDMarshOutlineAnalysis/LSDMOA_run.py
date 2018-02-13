@@ -74,7 +74,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
 
 
     for site in Site:
-        """print("Loading input data from site: "+site)
+        print("Loading input data from site: "+site)
         # NB: When loading input data, please make sure the naming convention shown here is respected.
 
         print(" Loading DEM")
@@ -109,13 +109,12 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         #Marsh = Marsh [850:1050,230:430]
 
         DEM = DEM [700:1300,100:600]
-        Marsh = Marsh [700:1300,100:600]"""
+        Marsh = Marsh [700:1300,100:600]
 
 
 
 
-        Marsh = np.ones((50,50), dtype = np.float)
-
+        """Marsh = np.ones((50,50), dtype = np.float)
         from random import randint
 
         DEM = np.ones((50,50), dtype = np.float)
@@ -144,7 +143,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Marsh[18, 5:9] = 0
         Marsh[20:27, 41] = 0
         Marsh[2:7, 25:30] = 1
-        Marsh[30:35, 0] = 0
+        Marsh[30:35, 0] = 0"""
 
 
 
@@ -182,16 +181,16 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         #Outline_buffer = Outline_object.swath (Outline_value, Nodata_value)
 
         # Plot the things
-        Marsh_object.plot_map(Output_dir+'Figures/', '00_Marsh_object', 'Sous-fifre', Nodata_value)
-        Marsh_DEM.plot_map(Output_dir+'Figures/', '01_Marsh_DEM', 'Sous-fifre', Nodata_value)
-        Marsh_labels.plot_map(Output_dir+'Figures/', '02_Marsh_Labels', 'Sous-fifre', Nodata_value)
-        Outline_object.plot_map(Output_dir+'Figures/', '03_Outline_object', 'Sous-fifre', Nodata_value)
-        Outline_labels.plot_map(Output_dir+'Figures/', '04_Outline_labels', 'Sous-fifre', Nodata_value)
-        Outline_simple.plot_map(Output_dir+'Figures/', '05_Outline_simple', 'Sous-fifre', Nodata_value)
-        Outline_trimmed.plot_map(Output_dir+'Figures/', '06_Outline_trimmed', 'Sous-fifre', Nodata_value)
-        Outline_length.plot_map(Output_dir+'Figures/', '07_Outline_length', 'Sous-fifre', Nodata_value)
+        #Marsh_object.plot_map(Output_dir+'Figures/', '00_Marsh_object', 'Sous-fifre', Nodata_value)
+        #Marsh_DEM.plot_map(Output_dir+'Figures/', '01_Marsh_DEM', 'Sous-fifre', Nodata_value)
+        #Marsh_labels.plot_map(Output_dir+'Figures/', '02_Marsh_Labels', 'Sous-fifre', Nodata_value)
+        #Outline_object.plot_map(Output_dir+'Figures/', '03_Outline_object', 'Sous-fifre', Nodata_value)
+        #Outline_labels.plot_map(Output_dir+'Figures/', '04_Outline_labels', 'Sous-fifre', Nodata_value)
+        #Outline_simple.plot_map(Output_dir+'Figures/', '05_Outline_simple', 'Sous-fifre', Nodata_value)
+        #Outline_trimmed.plot_map(Output_dir+'Figures/', '06_Outline_trimmed', 'Sous-fifre', Nodata_value)
+        #Outline_length.plot_map(Output_dir+'Figures/', '07_Outline_length', 'Sous-fifre', Nodata_value)
 
-        plot_lines_on_basemap(Lines_row, Lines_col, Lines_dist, Lines_code, Outline_length, Output_dir+'Figures/', '08_Lines_2Rules', Nodata_value)
+        plot_lines_on_basemap(Lines_row, Lines_col, Lines_dist, Lines_code, Outline_length, Output_dir+'Figures/', '08_Lines_DivAll', Nodata_value)
 
         #Outline_shortest_length.plot_map(Output_dir+'Figures/', '07_Outline_short_length', 'Sous-fifre', Nodata_value)
 

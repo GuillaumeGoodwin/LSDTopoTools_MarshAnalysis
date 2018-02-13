@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 #from osgeo.gdalconst import *
 import cPickle
 
-
+import gdal
 
 
 # This is a new functions file
@@ -90,7 +90,7 @@ def ENVI_raster_binary_to_2d_array(file_name):
 
     driver.Register()
 
-    inDs = gdal.Open(file_name, GA_ReadOnly)
+    inDs = gdal.Open(file_name)
 
     if inDs is None:
         print "Couldn't open this file: " + file_name
@@ -565,8 +565,9 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, Lines_row,
 
     Author: GCHG
     """
-    print "We are looking for divergent line starts"
 
+    print "########################################"
+    print "We are looking for divergent line starts"
 
     kernel_size = 3
 
@@ -592,7 +593,7 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, Lines_row,
             This_line_code = Code_array[Startpoint_row, Startpoint_col]; This_line_code_index = np.where(Lines_code == This_line_code)[0]
 
             #Tell something to the confused user
-            print '\nLine starts (', Startpoint_row, Startpoint_col, ').', 'Code is :' , This_line_code
+            print '\nLine starts (', Startpoint_row, Startpoint_col, ').', 'Code is :' , int(This_line_code)
             print '....Line ends (', Endpoint_row, Endpoint_col, '). Length is :' , Length_array[Endpoint_row, Endpoint_col]
 
             # Record where the length kernel is non-null AND has a different line code.
@@ -632,18 +633,13 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, Lines_row,
                         Lines_col[Second_line_index] = Lines_col[Second_line_index] + Lines_col[First_line_index]
                         # Update the length array
                         Length_array[Lines_row[Second_line_index], Lines_col[Second_line_index]] = Lines_dist[Second_line_index]
+                        Code_array[Lines_row[Second_line_index], Lines_col[Second_line_index]] = Lines_code[Second_line_index]
 
                         Indices_to_clean.append(First_line_index)
 
     #Now rid of the lines that have become redundant
-
-    #print 'These are the lines we worked with'
-    #print Lines_row[i], Lines_col[i], Lines_dist[i], Lines_code[i]
     for i in Indices_to_clean:
         del Lines_row[i]; del Lines_col[i]; del Lines_dist[i]; del Lines_code[i]
-
-    #print 'These are the lines now'
-    #print Lines_row[i], Lines_col[i], Lines_dist[i], Lines_code[i]
 
     return Length_array, Lines_row, Lines_col, Lines_dist, Lines_code
 
@@ -670,11 +666,10 @@ def Graft_diverging_branch (Length_array, Labels_array, Label_value, Lines_row, 
     Author: GCHG
     """
 
+    print "########################################"
     print "We are looking for diverging branches"
 
     kernel_size = 3
-
-    Indices_to_clean = []
 
     # For each line
     for i in range(len(Lines_row)):
@@ -693,20 +688,10 @@ def Graft_diverging_branch (Length_array, Labels_array, Label_value, Lines_row, 
             eK_len, eKr_len, eKc_len = kernel (Length_array, kernel_size, Endpoint_row, Endpoint_col)
             eK_cod, eKr_cod, eKc_cod = kernel (Code_array, kernel_size, Endpoint_row, Endpoint_col)
             # Also retrieve the line's code
-            This_line_code = Code_array[Startpoint_row, Startpoint_col]
-
-            print This_line_code
-            print Lines_code
-            print np.where(Lines_code == This_line_code)
-
-            This_line_code_index = np.where(Lines_code == This_line_code)[0][0]
-
-
-            #There is something wrong when we update the code.... Fix this!!!!!!
-
+            This_line_code = Code_array[Startpoint_row, Startpoint_col]; This_line_code_index = np.where(Lines_code == This_line_code)[0][0]
 
             #Tell something to the confused user
-            print '\nLine starts (', Startpoint_row, Startpoint_col, ').', 'Code is :' , This_line_code
+            print '\nLine starts (', Startpoint_row, Startpoint_col, ').', 'Code is :' , int(This_line_code)
             print '....Line ends (', Endpoint_row, Endpoint_col, '). Length is :' , Length_array[Endpoint_row, Endpoint_col]
 
             # Record where the length kernel is non-null AND has a different line code.
@@ -717,122 +702,171 @@ def Graft_diverging_branch (Length_array, Labels_array, Label_value, Lines_row, 
             # If it's connected at the start
             if len(sK_len[Touches_start[:][0]]) > 0 and np.count_nonzero(sK_cod[Touches_start[:][0]]) > 0 :
                 print '.....This line connects to another at its starting point.'
-                # Find the smallest distance in that subset and where it is in the array
-                Smallest_dist = np.amin (sK_len[Touches_start]); Smallest_dist_index = np.where(sK_len == Smallest_dist)
-                # Find the connecting line code
-                Smallest_dist_code = np.amin(sK_cod[np.where(sK_len == Smallest_dist)])
+                # Find the (ironically) biggest distance in that subset and where it is in the array
+                Smallest_dist = np.amax (sK_len[Touches_start]); Smallest_dist_index = np.where(sK_len == Smallest_dist)
 
                 # If the shortest distance is NOT  beginning of a line:
                 if Smallest_dist > 0.001*Scale:
                     print '......this line was born in the wake of another'
+                    # Find the coordinates and distance of the connecting point on the other line
+                    This_line_row = Startpoint_row; This_line_col = Startpoint_col
+                    Other_line_row = sKr_len[Smallest_dist_index[0][0]]; Other_line_col = sKc_len[Smallest_dist_index[1][0]]
+                    #Find out how far apart they are
+                    Distance = np.sqrt((Other_line_row-This_line_row)**2 + (Other_line_col-This_line_col)**2)
+                    # Find the codes
+                    This_line_code = Code_array[This_line_row, This_line_col]
+                    Other_line_code = Code_array[Other_line_row, Other_line_col]
+                    # Now find the line indices
+                    This_line_index = np.where(Lines_code == This_line_code)[0][0]; Other_line_index = np.where(Lines_code == Other_line_code)[0][0]
 
-                    # Find the coordinates and distance of this point.
-                    Selected_row = sKr_len[Smallest_dist_index[0][0]]; Selected_col = sKc_len[Smallest_dist_index[1][0]]
+                    # Find the right distance along the other line
+                    Distance_index = np.where(Lines_dist[Other_line_index] == Smallest_dist)[0][0]
 
-                    #Find out how far aprt they are
-                    Distance = np.sqrt((Selected_row-Startpoint_row)**2 + (Selected_col-Startpoint_col)**2)
-                    # Find the line with the right code
-                    Code_index = np.where(Lines_code == Smallest_dist_code)[0][0]
-                    # Find the right distance along that line
-                    Distance_index = np.where(Lines_dist[Code_index] == Smallest_dist)[0][0]
-                    # If it indeed exists
-                    if len(np.where(Lines_dist[Code_index] == Smallest_dist)[0]) > 0:
-                        #Prepare to append the other line
-
-                        print Distance_index+1
-
-                        Dist_to_append = Lines_dist[Code_index][0:Distance_index+1]
-                        Row_to_append = Lines_row[Code_index][0:Distance_index+1]
-                        Col_to_append = Lines_col[Code_index][0:Distance_index+1]
-                        #If there's something to append
-                        if len(Dist_to_append) > 1:
-                            #Add the correct distances
-
-                            print This_line_code_index
-
-                            Lines_dist[This_line_code_index] = (np.asarray(Lines_dist[This_line_code_index]) + Dist_to_append[-1] + Distance).tolist()
-                            # Stitch the lines
-                            Lines_dist[This_line_code_index] = Dist_to_append + Lines_dist[This_line_code_index]
-                            Lines_row[This_line_code_index] = Row_to_append + Lines_row[This_line_code_index]
-                            Lines_col[This_line_code_index] = Col_to_append + Lines_col[This_line_code_index]
-                            #Update the length array
-                            Length_array[Lines_row[This_line_code_index], Lines_col[This_line_code_index]] = Lines_dist[This_line_code_index]
-
-                            #print Lines_row
-                            #print Lines_col
-
-                            #print Lines_code
+                    #Prepare to append the other line
+                    Dist_to_append = Lines_dist[Other_line_index][0:Distance_index+1]
+                    Row_to_append = Lines_row[Other_line_index][0:Distance_index+1]
+                    Col_to_append = Lines_col[Other_line_index][0:Distance_index+1]
+                    #If there's something to append
+                    if len(Dist_to_append) > 1:
+                        #Add the correct distances
+                        Lines_dist[This_line_index] = (np.asarray(Lines_dist[This_line_index]) + Dist_to_append[-1] + Distance).tolist()
+                        # Stitch the lines
+                        Lines_dist[This_line_index] = Dist_to_append + Lines_dist[This_line_index]
+                        #Lines_code[This_line_index] = Dist_to_append + Lines_dist[This_line_index]
+                        Lines_row[This_line_index] = Row_to_append + Lines_row[This_line_index]
+                        Lines_col[This_line_index] = Col_to_append + Lines_col[This_line_index]
+                        #Update the arrays
+                        Length_array[Lines_row[This_line_index], Lines_col[This_line_index]] = Lines_dist[This_line_index]
+                        #Code_array[Lines_row[This_line_index], Lines_col[This_line_index]] = This_line_code
 
     return Length_array, Lines_row, Lines_col, Lines_dist, Lines_code
 
-#If it's connected at the end
-"""if len(eK_len[Touches_end[:][0]]) > 0 and np.count_nonzero(eK_cod[Touches_end[:][0]]) > 0 :
-print '.....This line connects to another at its ending point.'
-# Find the smallest distance in that subset and where it is in the array
-Smallest_dist = np.amin (eK_len[Touches_end]); Smallest_dist_index = np.where(eK_len == Smallest_dist)
-# Find the connecting line code
-#Smallest_dist_code = np.amin(eK_cod[np.where(eK_len == Smallest_dist)])
-
-#If this distance is shorter than the one of the line we are looking at
-if Smallest_dist < Length_array[Endpoint_row, Endpoint_col]:
-print '......The other line is shorter'
-#The first line is the one we are looking at, and the second is the other one
-Long_line_row = Endpoint_row; Long_line_col = Endpoint_col
-Short_line_row = eKr_len[Smallest_dist_index[0][0]]; Short_line_col = eKc_len[Smallest_dist_index[1][0]]
-else:
-#Well it's the other way around, innit?
-Short_line_row = Endpoint_row; Short_line_col = Endpoint_col
-Long_line_row = eKr_len[Smallest_dist_index[0][0]]; Long_line_col = eKc_len[Smallest_dist_index[1][0]]
-
-#Tis the distance spearating these lines
-Distance = np.sqrt((Short_line_row-Long_line_row)**2 + (Short_line_col-Long_line_col)**2)
-# Find the code associated to those two points
-Short_line_code = Code_array[Short_line_row, Short_line_col]; Long_line_code = Code_array[Long_line_row, Long_line_col]
-# Select the two lines that go with these codes
-Short_line_index = np.where(Lines_code == Short_line_code); Long_line_index = np.where(Lines_code == Long_line_code)
-
-#Check that these lines don't have a common origin
-
-#print Lines_row[Short_line_index[0]][0], Lines_col[Short_line_index[0]][0]
-#print Lines_row[Long_line_index[0]][0], Lines_col[Long_line_index[0]][0]
-
-#STOP
-
-#if Lines_row[Short_line_index[0]][] !=   and  Lines_col[Short_line_index[0]] :
 
 
+##########################################################################################################
+##########################################################################################################
+def Graft_converging_branch (Length_array, Labels_array, Label_value, Lines_row, Lines_col, Lines_dist, Lines_code, Code_array, Scale):
+    """
+    This function stitches a line that has its starting point in contact with another line that is already on its way.
+
+    There's a labeled array and a storage array
+
+    of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
+
+    Author: GCHG
+    """
+
+    print "\n########################################"
+    print "We are looking for converging branches"
+
+    kernel_size = 3
+
+    # For each line
+    for i in range(len(Lines_row)):
+        #If this is not a 1-pixel-long line:
+        if len(Lines_row[i])>1:
+            # Find the starting point
+            Startpoint_row = Lines_row[i][0]; Startpoint_col = Lines_col[i][0]
+            # Make kernels around the starting point
+            sK_lab, sKr_lab, sKc_lab = kernel (Labels_array, kernel_size, Startpoint_row, Startpoint_col)
+            sK_len, sKr_len, sKc_len = kernel (Length_array, kernel_size, Startpoint_row, Startpoint_col)
+            sK_cod, sKr_cod, sKc_cod = kernel (Code_array, kernel_size, Startpoint_row, Startpoint_col)
+            #Also find its end point
+            Endpoint_row = Lines_row[i][-1]; Endpoint_col = Lines_col[i][-1]
+            # Make kernels around the end point
+            eK_lab, eKr_lab, eKc_lab = kernel (Labels_array, kernel_size, Endpoint_row, Endpoint_col)
+            eK_len, eKr_len, eKc_len = kernel (Length_array, kernel_size, Endpoint_row, Endpoint_col)
+            eK_cod, eKr_cod, eKc_cod = kernel (Code_array, kernel_size, Endpoint_row, Endpoint_col)
+            # Also retrieve the line's code
+            This_line_code = Code_array[Startpoint_row, Startpoint_col]; This_line_code_index = np.where(Lines_code == This_line_code)[0][0]
+
+            #Tell something to the confused user
+            print '\nLine starts (', Startpoint_row, Startpoint_col, ').', 'Code is :' , int(This_line_code)
+            print '....Line ends (', Endpoint_row, Endpoint_col, '). Length is :' , Length_array[Endpoint_row, Endpoint_col]
+
+            # Record where the length kernel is non-null AND has a different line code.
+            # This is a connecting line
+            Touches_start = np.where(np.logical_and(sK_len > 0, sK_cod.astype(int) != int(This_line_code)))
+            Touches_end = np.where(np.logical_and(eK_len > 0, eK_cod.astype(int) != int(This_line_code)))
 
 
-# Reverse the short line (arbitrary)
-Lines_row[Short_line_index[0]] = list(reversed(np.asarray(Lines_row[Short_line_index[0]])))
-Lines_col[Short_line_index[0]] = list(reversed(np.asarray(Lines_col[Short_line_index[0]])))
+            #If it's connected at the end
+            if len(eK_len[Touches_end[:][0]]) > 0 and np.count_nonzero(eK_cod[Touches_end[:][0]]) > 0 :
+                print '.....This line connects to another at its ending point.'
+                # Find the smallest distance in that subset and where it is in the array
+                Smallest_dist = np.amin (eK_len[Touches_end]); Smallest_dist_index = np.where(eK_len == Smallest_dist)
+                # Find the connecting line code
+                #Smallest_dist_code = np.amin(eK_cod[np.where(eK_len == Smallest_dist)])
 
-#Make sure it's not one of those short lines
-if len(Lines_dist[Short_line_index[0]]) > 1:
-# Add the extra distance values to the first line
-Lines_dist[Long_line_index[0]] = (np.asarray(Lines_dist[Long_line_index[0]]) + Lines_dist[Short_line_index[0]][-1] + Distance).tolist()
-
-#Where to stop stitching
-Limit_dist_index = np.where(np.floor(Lines_dist[Long_line_index[0]]) == np.floor(Smallest_dist))
-#print Smallest_dist
-#print Lines_dist[Long_line_index[0]]
-#print Limit_dist_index
-
-if len(Limit_dist_index[0]) > 0:
-
-# Stitch the lines
-Lines_dist[Short_line_index[0]] =  Lines_dist[Long_line_index[0]][0:Limit_dist_index[0]] + Lines_dist[Short_line_index[0]]
-Lines_row[Short_line_index[0]] = Lines_row[Long_line_index[0]][0:Limit_dist_index[0]] + Lines_row[Short_line_index[0]]
-Lines_col[Short_line_index[0]] = Lines_col[Long_line_index[0]][0:Limit_dist_index[0]] + Lines_col[Short_line_index[0]]
-# Update the length array
-Length_array[Lines_row[Short_line_index[0]], Lines_col[Short_line_index[0]]] = Lines_dist[Short_line_index[0]]"""
-
-# The rule is if a line encounters another at the end of its life, then the shortest line is reversed and absorbs the longest line.
+                #If this distance is shorter than the one of the line we are looking at
+                if Smallest_dist < Length_array[Endpoint_row, Endpoint_col]:
+                    print '......The other line is shorter'
+                    #The first line is the one we are looking at, and the second is the other one
+                    Long_line_row = Endpoint_row; Long_line_col = Endpoint_col
+                    Short_line_row = eKr_len[Smallest_dist_index[0][0]]; Short_line_col = eKc_len[Smallest_dist_index[1][0]]
+                else:
+                    #Well it's the other way around, innit?
+                    print '......The other line is longer'
+                    Short_line_row = Endpoint_row; Short_line_col = Endpoint_col
+                    Long_line_row = eKr_len[Smallest_dist_index[0][0]]; Long_line_col = eKc_len[Smallest_dist_index[1][0]]
 
 
+                #Tis the distance spearating these lines
+                Distance = np.sqrt((Short_line_row-Long_line_row)**2 + (Short_line_col-Long_line_col)**2)
+                # Find the code associated to those two points
+                Short_line_code = Code_array[Short_line_row, Short_line_col]; Long_line_code = Code_array[Long_line_row, Long_line_col]
+                # Select the two lines that go with these codes
+                Short_line_index = np.where(Lines_code == Short_line_code); Long_line_index = np.where(Lines_code == Long_line_code)
 
-#return Length_array, Lines_row, Lines_col, Lines_dist, Lines_code
+                #Tell something to the confused user
+                print 'Here are the starting points:'
+                print Lines_row[Short_line_index[0]][0], Lines_col[Short_line_index[0]][0] , '/', Lines_row[Long_line_index[0]][0], Lines_col[Long_line_index[0]][0]
 
+                #Check that these lines don't have a common origin
+                if Lines_row[Short_line_index[0]][0] != Lines_row[Long_line_index[0]][0] or  Lines_col[Short_line_index[0]][0] != Lines_col[Long_line_index[0]][0] :
+
+                    print "WHOOOEEEE"
+
+                    #sys.exit()
+
+                    # Reverse the short line (arbitrary)
+                    Lines_row[Short_line_index[0]] = list(reversed(np.asarray(Lines_row[Short_line_index[0]])))
+                    Lines_col[Short_line_index[0]] = list(reversed(np.asarray(Lines_col[Short_line_index[0]])))
+
+                    #Make sure it's not one of those short lines
+                    if len(Lines_dist[Short_line_index[0]]) > 1:
+                    # Add the extra distance values to the first line
+                        Lines_dist[Long_line_index[0]] = (np.asarray(Lines_dist[Long_line_index[0]]) + Lines_dist[Short_line_index[0]][-1] + Distance).tolist()
+
+                        #Where to stop stitching
+                        Limit_dist_index = np.where(np.floor(Lines_dist[Long_line_index[0]]) == np.floor(Smallest_dist))
+                        #print Smallest_dist
+                        #print Lines_dist[Long_line_index[0]]
+                        #print Limit_dist_index
+
+                        if len(Limit_dist_index[0]) > 0:
+
+                            # Stitch the lines
+                            Lines_dist[Short_line_index[0]] =  Lines_dist[Long_line_index[0]][0:Limit_dist_index[0]] + Lines_dist[Short_line_index[0]]
+                            Lines_row[Short_line_index[0]] = Lines_row[Long_line_index[0]][0:Limit_dist_index[0]] + Lines_row[Short_line_index[0]]
+                            Lines_col[Short_line_index[0]] = Lines_col[Long_line_index[0]][0:Limit_dist_index[0]] + Lines_col[Short_line_index[0]]
+                            # Update the length array
+                            Length_array[Lines_row[Short_line_index[0]], Lines_col[Short_line_index[0]]] = Lines_dist[Short_line_index[0]]
+
+                            # The rule is if a line encounters another at the end of its life, then the shortest line is reversed and absorbs the longest line.
+
+
+
+
+    return Length_array, Lines_row, Lines_col, Lines_dist, Lines_code
 
 
 

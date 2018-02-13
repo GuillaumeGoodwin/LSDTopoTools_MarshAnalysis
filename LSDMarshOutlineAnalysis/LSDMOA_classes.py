@@ -231,12 +231,14 @@ class Marsh_outline (Land_surface):
             # Measure the length of the stitched line for this label value
             new_array, Line_row, Line_col, Line_dist, Line_code, Code_array = fct.Measure_all_lines (new_array, Labels[lab], Scale)
             #Stitch the diverging starts
-            print 
+            print
             new_array, Line_row, Line_col, Line_dist, Line_code = fct.Stitch_diverging_starts (new_array, Labels_array, Labels[lab], Line_row, Line_col, Line_dist, Line_code, Code_array, Scale)
             print
             #Stitch outward going branches
             new_array, Line_row, Line_col, Line_dist, Line_code = fct.Graft_diverging_branch (new_array, Labels_array, Labels[lab], Line_row, Line_col, Line_dist, Line_code, Code_array, Scale)
 
+            #Stitch inward going branches
+            new_array, Line_row, Line_col, Line_dist, Line_code = fct.Graft_converging_branch (new_array, Labels_array, Labels[lab], Line_row, Line_col, Line_dist, Line_code, Code_array, Scale)
 
             Lines_row.append (Line_row); Lines_col.append (Line_col); Lines_dist.append (Line_dist); Lines_code.append (Line_code)
 

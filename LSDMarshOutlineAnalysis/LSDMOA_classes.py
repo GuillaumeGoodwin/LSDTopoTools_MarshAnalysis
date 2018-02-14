@@ -238,43 +238,10 @@ class Marsh_outline (Land_surface):
             new_array, Line_row, Line_col, Line_dist, Line_code = fct.Graft_diverging_branch (new_array, Labels_array, Labels[lab], Line_row, Line_col, Line_dist, Line_code, Code_array, Scale)
 
             #Stitch inward going branches
-            new_array, Line_row, Line_col, Line_dist, Line_code = fct.Graft_converging_branch (new_array, Labels_array, Labels[lab], Line_row, Line_col, Line_dist, Line_code, Code_array, Scale)
+            #new_array, Line_row, Line_col, Line_dist, Line_code = fct.Graft_converging_branch (new_array, Labels_array, Labels[lab], Line_row, Line_col, Line_dist, Line_code, Code_array, Scale)
 
             Lines_row.append (Line_row); Lines_col.append (Line_col); Lines_dist.append (Line_dist); Lines_code.append (Line_code)
 
-            #NOW WE NEED TO STITCH ALL THIS TOGETHER
-
-
-            #print 'Da number of elements'
-            #print len(Line_row)
-
-            #print '\nDa rows'
-            #print Line_row
-
-            #print '\nDa cols'
-            #print Line_col
-
-            #print '\nDa dist'
-            #print Line_dist
-
-            #STOP
-
-
-
-            #Measure all the lines
-            #num_filled = 0
-            #num_elements = len (np.where(array == values[val])[0])
-            #while num_filled < num_elements:
-                #array_2, Line_x, Line_y, Line_dist = Measure_line_length (array, array_2, values[val], Nodata_value)
-
-                #Lines_x.append(Line_x)
-                #Lines_y.append(Line_y)
-                #Lines_dist.append(Line_dist)
-
-                #num_filled = len (np.where(np.logical_and(array == values[val], array_2 !=0))[0])
-                #print 'Number of filled elements = ', num_filled, '/', num_elements
-
-            #self, Line_x, Line_y, Line_dist = fct.Longest_line_length (self, val, 1)
 
         Stop = timeit.default_timer()
         print '  Surveying runtime : ', Stop - Start , 's'
@@ -282,7 +249,7 @@ class Marsh_outline (Land_surface):
         return new_array, Lines_row, Lines_col, Lines_dist, Lines_code
 
 
-
+    
 
 
 

@@ -29,8 +29,7 @@ from LSDMOA_classes import *
 from LSDMOA_functions import ENVI_raster_binary_to_2d_array
 from LSDMOA_functions import ENVI_raster_binary_from_2d_array
 from LSDMOA_functions import plot_lines_on_basemap
-
-
+from LSDMOA_functions import Select_few_longest
 
 def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
             Output_dir = "/Example_Data/Output/",
@@ -114,7 +113,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
 
 
 
-        """Marsh = np.ones((50,50), dtype = np.float)
+        Marsh = np.ones((50,50), dtype = np.float)
         from random import randint
 
         DEM = np.ones((50,50), dtype = np.float)
@@ -143,7 +142,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Marsh[18, 5:9] = 0
         Marsh[20:27, 41] = 0
         Marsh[2:7, 25:30] = 1
-        Marsh[30:35, 0] = 0"""
+        Marsh[30:35, 0] = 0
 
 
 
@@ -174,7 +173,9 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
 
         # Now calculate the lengths
         Outline_length, Lines_row, Lines_col, Lines_dist, Lines_code = Outline_trimmed.calc_outline_length (1)
-        #Outline_shortest_length = Outline_simple.calc_outline_length (1, True)
+
+        # Now select the longest lines
+        nLines_row, nLines_col, nLines_dist, nLines_code = Select_few_longest (Lines_row, Lines_col, Lines_dist, Lines_code)
 
         # Show results of a circular kernel
         #Outlines, Outlines_row, Outlines_col = Outline_labels.vectorise(Nodata_value)
@@ -190,7 +191,9 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         #Outline_trimmed.plot_map(Output_dir+'Figures/', '06_Outline_trimmed', 'Sous-fifre', Nodata_value)
         #Outline_length.plot_map(Output_dir+'Figures/', '07_Outline_length', 'Sous-fifre', Nodata_value)
 
+
         plot_lines_on_basemap(Lines_row, Lines_col, Lines_dist, Lines_code, Outline_length, Output_dir+'Figures/', '08_Lines_DivAll', Nodata_value)
+        plot_lines_on_basemap(nLines_row, nLines_col, nLines_dist, nLines_code, Outline_length, Output_dir+'Figures/', '09_Lines_DivAll_simple', Nodata_value)
 
         #Outline_shortest_length.plot_map(Output_dir+'Figures/', '07_Outline_short_length', 'Sous-fifre', Nodata_value)
 

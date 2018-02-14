@@ -861,15 +861,88 @@ def Graft_converging_branch (Length_array, Labels_array, Label_value, Lines_row,
                             # Update the length array
                             Length_array[Lines_row[Short_line_index[0]], Lines_col[Short_line_index[0]]] = Lines_dist[Short_line_index[0]]
 
-                            # The rule is if a line encounters another at the end of its life, then the shortest line is reversed and absorbs the longest line.
-
-
-
 
     return Length_array, Lines_row, Lines_col, Lines_dist, Lines_code
 
 
 
+##########################################################################################################
+##########################################################################################################
+def Select_few_longest (Lines_row, Lines_col, Lines_dist, Lines_code):
+    """
+    This function selects the longest lines in a set of polylines. The longest line within a set sharing the same origin is selected.
+    The structure for each list is: 1st index = label; 2nd index = code; 3rd index = position on line
+
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
+
+    Author: GCHG
+    """
+
+    print "\n########################################"
+    print "Let's find the longest branch"
+
+
+    # Instead of deleting, store the selected things in a new array. it's easier.
+    # Initialise the new lines
+    nLines_row = []; nLines_col = []; nLines_dist = []; nLines_code = []
+
+    # For each label
+    for label in range(len(Lines_row)):
+        print " \nThe label is:", label+1
+        # Initialise the list of indices to keep
+        nLine_row = [[0, 0]]; nLine_col = [[0, 0]]; nLine_dist = [[0, 0]]; nLine_code = [[0]]
+        if len(Lines_row[label]) > 0:
+            for code in range(len(Lines_code[label])):
+                Origin = [Lines_row[label][code][0], Lines_col[label][code][0]]
+                print "   The code is:", Lines_code[label][code]
+                print "    Line origin:", Origin,"; Line length:", Lines_dist[label][code][-1]
+                # if the origins are the same as a set of origins in the selected set:
+                Origin = [Lines_row[label][code][0], Lines_col[label][code][0]]
+                Rep_origin = []
+                for i in range(len(nLine_row)):
+                    Rep_origin.append([nLine_row[i][0], nLine_col[i][0]])
+
+                #print Rep_origin
+
+                Matching_origin = [item for item in Rep_origin if item == Origin]
+
+                #print Matching_origin
+
+                if len(Matching_origin) > 0 :
+                    print "     matching origins:", Matching_origin
+                    Matching_origin_id = Rep_origin.index(Matching_origin[0])
+                    # Compare lengths between the line examined and the stored one:
+                    if Lines_dist[label][code][-1] > nLine_dist[Matching_origin_id][-1]:
+                        # The longest line takes the spot in the list
+                        nLine_row[Matching_origin_id] = Lines_row[label][code]
+                        nLine_col[Matching_origin_id] = Lines_col[label][code]
+                        nLine_dist[Matching_origin_id] = Lines_dist[label][code]
+                        nLine_code[Matching_origin_id] = Lines_code[label][code]
+
+                # if these origins are not in the set:
+                else:
+                    # We're not adding really small lines
+                    if len(Lines_row[label][code]) > 1:
+                        print "     tis a new line"
+                        # Add the line to the selected set.
+                        nLine_row.append(Lines_row[label][code])
+                        nLine_col.append(Lines_col[label][code])
+                        nLine_dist.append(Lines_dist[label][code])
+                        nLine_code.append(Lines_code[label][code])
+
+            del nLine_row[0]; del nLine_col[0];  del nLine_dist[0];  del nLine_code[0]
+
+        # Store the result in the new lines
+        nLines_row.append(nLine_row); nLines_col.append(nLine_col); nLines_dist.append(nLine_dist); nLines_code.append(nLine_code)
+
+    return nLines_row, nLines_col, nLines_dist, nLines_code
 
 
 
@@ -1193,31 +1266,6 @@ def label_connected (array, Nodata_value):
 
     return array
 
-
-
-
-def select_few_longest (array, Nodata_value, num):
-    # num is the number of lines you select
-    array_2 = np.zeros(array.shape, dtype = np.float)
-
-    values = range (np.amin(array[array>0]), np.amax(array), 1)
-    line_lengths = []
-    for value in values:
-        line_lengths.append(len(np.where(array == value)[0]))
-
-    line_lengths = np.asarray(line_lengths)
-    Longest = np.where(line_lengths == np.amax(line_lengths))
-    print values[Longest[0][0]], line_lengths[Longest[0][0]]
-    array_2[array == values[Longest[0][0]]] = values[Longest[0][0]]
-
-    if num > 0:
-        for i in range(num):
-            line_lengths[Longest[0][0]] = 0
-            Longest = np.where(line_lengths == np.amax(line_lengths))
-            print Longest[0][0]
-            array_2[array == values[Longest[0][0]]] = values[Longest[0][0]]
-
-    return array_2
 
 
 

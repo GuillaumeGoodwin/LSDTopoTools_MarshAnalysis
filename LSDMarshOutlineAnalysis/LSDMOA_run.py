@@ -30,6 +30,8 @@ from LSDMOA_functions import ENVI_raster_binary_to_2d_array
 from LSDMOA_functions import ENVI_raster_binary_from_2d_array
 from LSDMOA_functions import plot_lines_on_basemap
 from LSDMOA_functions import Select_few_longest
+from LSDMOA_functions import Lines_to_shp
+from LSDMOA_functions import Generate_transects
 
 def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
             Output_dir = "/Example_Data/Output/",
@@ -113,7 +115,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
 
 
 
-        Marsh = np.ones((50,50), dtype = np.float)
+        """Marsh = np.ones((50,50), dtype = np.float)
         from random import randint
 
         DEM = np.ones((50,50), dtype = np.float)
@@ -142,7 +144,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Marsh[18, 5:9] = 0
         Marsh[20:27, 41] = 0
         Marsh[2:7, 25:30] = 1
-        Marsh[30:35, 0] = 0
+        Marsh[30:35, 0] = 0"""
 
 
 
@@ -150,6 +152,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         # Here begins the actual MOA
         print "\nRunning the analysis"
 
+        # STEP 1: Make the lines
         #Make a proper object for the marsh
         Marsh_object = Marsh_platform(Marsh.shape[0], Marsh.shape[1])
         Marsh_object = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)
@@ -161,14 +164,12 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Outline_object = 0*Marsh_outline(Marsh.shape[0], Marsh.shape[1])
         Outline_object, Outline_value = Outline_object.complete_outline_from_array (Marsh_object)
         #Tightrope_object, Tightrope_value = Outline_object.tightrope_outline_from_array (Marsh_object)
-
         Outline_labels = Outline_object.label_connected (Nodata_value)
 
         #Now get rid of some useless lines
         Outline_simple = Outline_labels.reduce_to_marsh_labels (Marsh_labels, Nodata_value)
 
         #Now get rid of useless bits of every line
-        #THIS DOESN'T DO MUCH
         Outline_trimmed = Outline_simple.trim_to_main_stem (Marsh_object, Nodata_value)
 
         # Now calculate the lengths
@@ -190,14 +191,49 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         #Outline_simple.plot_map(Output_dir+'Figures/', '05_Outline_simple', 'Sous-fifre', Nodata_value)
         #Outline_trimmed.plot_map(Output_dir+'Figures/', '06_Outline_trimmed', 'Sous-fifre', Nodata_value)
         #Outline_length.plot_map(Output_dir+'Figures/', '07_Outline_length', 'Sous-fifre', Nodata_value)
+        #plot_lines_on_basemap(Lines_row, Lines_col, Lines_dist, Lines_code, Outline_length, Output_dir+'Figures/', '08_Lines_DivAll', Nodata_value)
+        #plot_lines_on_basemap(nLines_row, nLines_col, nLines_dist, nLines_code, Outline_length, Output_dir+'Figures/', '09_Lines_DivAll_simple', Nodata_value)
 
 
-        plot_lines_on_basemap(Lines_row, Lines_col, Lines_dist, Lines_code, Outline_length, Output_dir+'Figures/', '08_Lines_DivAll', Nodata_value)
-        plot_lines_on_basemap(nLines_row, nLines_col, nLines_dist, nLines_code, Outline_length, Output_dir+'Figures/', '09_Lines_DivAll_simple', Nodata_value)
+        # STEP 2: Store the lines into shapefiles
+        Lines_to_shp(nLines_row, nLines_col, envidata_DEM, DEM, Output_dir+'Shapefiles/', site)
 
-        #Outline_shortest_length.plot_map(Output_dir+'Figures/', '07_Outline_short_length', 'Sous-fifre', Nodata_value)
+        # STEP 3: MAke the transects with that weird function
+
+        # For each label
+        for label in range(len(nLines_row)):
+            print " \nThe label is:", label+1
+            if len(nLines_row[label]) > 0:
+                for code in range(len(nLines_row[label])):
+                    print "  Saving code number ", code+1
+                    Generate_transects(Output_dir+'Shapefiles/'+'%s_%s_%s.shp' % (site,label, code),Output_dir+'Shapefiles/'+'%s_%s_%s_Tr.shp' % (site,label, code), 10, 20)
 
 
+        """
+        Okay, so far we have lots of single lines stored each in a shapefile, and for each line a set of perpendicular transects stored in another shapefile.
+
+        The next steps are:
+        - Clean up the code that got us there, i.e. make sensible comments and documentation.
+        - Sort the issue of having redundant lines.
+        - Find a way to extract profiles.
+        - Identify sites to work on and get tidal range and wind/wave data and regional bathymetry.
+        - Think about point-based forcing indicators
+        - Start writing up the article and poster to get a headstart.
+        - Send an email to Jaap.
+
+        """
+
+
+        #new_geotransform, new_projection, file_out = ENVI_raster_binary_from_2d_array (envidata_DEM, "Marsh.bil", post_DEM, DEM)
+
+        #ENVI_raster_binary_from_2d_array((envidata, file_out, post, DEM))
+
+
+
+
+
+        # Right, we have the polylines, but now we need to make them into shapefiles.
+        #https://gis.stackexchange.com/questions/85448/creating-polygon-shapefile-from-list-of-x-y-coordinates-using-python
 
         # FOR SWATHS, USE THiS
 

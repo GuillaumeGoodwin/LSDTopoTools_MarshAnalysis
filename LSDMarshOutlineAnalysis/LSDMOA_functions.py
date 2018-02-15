@@ -67,6 +67,10 @@ import scipy.ndimage as scim
 import cPickle as pickle
 
 
+from osgeo import ogr
+from shapely.geometry import LineString
+
+
 import itertools
 
 ##########################################################################################################
@@ -943,6 +947,167 @@ def Select_few_longest (Lines_row, Lines_col, Lines_dist, Lines_code):
         nLines_row.append(nLine_row); nLines_col.append(nLine_col); nLines_dist.append(nLine_dist); nLines_code.append(nLine_code)
 
     return nLines_row, nLines_col, nLines_dist, nLines_code
+
+
+
+
+
+##########################################################################################################
+##########################################################################################################
+def Lines_to_shp (Lines_row, Lines_col, Envidata, Enviarray, save_dir, site_name):
+    """
+    This function takes all these masses of riggly lines and turns each of them into a shapefile. This is going to take a lot of space, so we should probably think of deleting the shapefiles when we're done with them.
+
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Nothing. It just saves a bunch of shapefiles
+
+    Author: GCHG
+    """
+    X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
+    Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
+
+    # For each label
+    for label in range(len(Lines_row)):
+        print " \nThe label is:", label+1
+        if len(Lines_row[label]) > 0:
+            for code in range(len(Lines_row[label])):
+                print "  Saving code number ", code+1
+                Coordinates = []
+                for i in range(len(Lines_row[label][code])):
+                    coord_pair = (X_cell_width*Lines_col[label][code][i]+X_origin, Y_cell_width*Lines_row[label][code][i]+Y_origin)
+                    Coordinates.append(coord_pair)
+                # Here's an example Shapely geometry
+                poly = LineString(Coordinates)
+                # Now convert it to a shapefile with OGR
+                driver = ogr.GetDriverByName('Esri Shapefile')
+                ds = driver.CreateDataSource('%s/%s_%s_%s.shp' % (save_dir,site_name,label, code))
+                #ds = driver.CreateDataSource(save_dir+str(label)+'_'+str(code)+'.shp')
+                layer = ds.CreateLayer('', None, ogr.wkbLineString)
+                # Add one attribute
+                layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
+                defn = layer.GetLayerDefn()
+                ## If there are multiple geometries, put the "for" loop here
+                # Create a new feature (attribute and geometry)
+                feat = ogr.Feature(defn)
+                feat.SetField('id', 123)
+                # Make a geometry, from Shapely object
+                geom = ogr.CreateGeometryFromWkb(poly.wkb)
+                feat.SetGeometry(geom)
+                layer.CreateFeature(feat)
+                feat = geom = None  # destroy these
+                # Save and close everything
+                ds = layer = feat = geom = None
+
+
+
+
+##########################################################################################################
+##########################################################################################################
+def Generate_transects (in_shp,out_shp, spc, sect_len):
+    #-------------------------------------------------------------------------------
+    # Name:        perp_lines.py
+    # Purpose:     Generates multiple profile lines perpendicular to an input line
+    #
+    # Author:      JamesS
+    #
+    # Created:     13/02/2013
+    #-------------------------------------------------------------------------------
+    """ Takes a shapefile containing a single line as input. Generates lines
+        perpendicular to the original with the specified length and spacing and
+        writes them to a new shapefile.
+
+        The data should be in a projected co-ordinate system.
+    """
+    import numpy as np
+    from fiona import collection
+    from shapely.geometry import LineString, MultiLineString
+
+    # ##############################################################################
+    # User input
+
+    # Input shapefile. Must be a single, simple line, in projected co-ordinates
+
+
+    # The shapefile to which the perpendicular lines will be written
+
+
+    # Profile spacing. The distance at which to space the perpendicular profiles
+    # In the same units as the original shapefile (e.g. metres)
+
+
+    # Length of cross-sections to calculate either side of central line
+    # i.e. the total length will be twice the value entered here.
+    # In the same co-ordinates as the original shapefile
+
+    # ##############################################################################
+
+    # Open the shapefile and get the data
+    source = collection(in_shp, "r")
+    data = source.next()['geometry']
+    line = LineString(data['coordinates'])
+
+    # Define a schema for the output features. Add a new field called 'Dist'
+    # to uniquely identify each profile
+    schema = source.schema.copy()
+    schema['properties']['Dist'] = 'float'
+
+    # Open a new sink for the output features, using the same format driver
+    # and coordinate reference system as the source.
+    sink = collection(out_shp, "w", driver=source.driver, schema=schema, crs=source.crs)
+
+    # Calculate the number of profiles to generate
+    n_prof = int(line.length/spc)
+
+    # Start iterating along the line
+    for prof in range(1, n_prof+1):
+        # Get the start, mid and end points for this segment
+        seg_st = line.interpolate((prof-1)*spc)
+        seg_mid = line.interpolate((prof-0.5)*spc)
+        seg_end = line.interpolate(prof*spc)
+
+        # Get a displacement vector for this segment
+        vec = np.array([[seg_end.x - seg_st.x,], [seg_end.y - seg_st.y,]])
+
+        # Rotate the vector 90 deg clockwise and 90 deg counter clockwise
+        rot_anti = np.array([[0, -1], [1, 0]])
+        rot_clock = np.array([[0, 1], [-1, 0]])
+        vec_anti = np.dot(rot_anti, vec)
+        vec_clock = np.dot(rot_clock, vec)
+
+        # Normalise the perpendicular vectors
+        len_anti = ((vec_anti**2).sum())**0.5
+        vec_anti = vec_anti/len_anti
+        len_clock = ((vec_clock**2).sum())**0.5
+        vec_clock = vec_clock/len_clock
+
+        # Scale them up to the profile length
+        vec_anti = vec_anti*sect_len
+        vec_clock = vec_clock*sect_len
+
+        # Calculate displacements from midpoint
+        prof_st = (seg_mid.x + float(vec_anti[0]), seg_mid.y + float(vec_anti[1]))
+        prof_end = (seg_mid.x + float(vec_clock[0]), seg_mid.y + float(vec_clock[1]))
+
+        # Write to output
+        rec = {'geometry':{'type':'LineString', 'coordinates':(prof_st, prof_end)},
+               'properties':{'Dist':(prof-0.5)*spc, u'id':0}}
+
+        sink.write(rec)
+
+    # Tidy up
+    source.close()
+    sink.close()
+
+################################################""
+
+
+
 
 
 

@@ -29,9 +29,16 @@ from LSDMOA_classes import *
 from LSDMOA_functions import ENVI_raster_binary_to_2d_array
 from LSDMOA_functions import ENVI_raster_binary_from_2d_array
 from LSDMOA_functions import plot_lines_on_basemap
+from LSDMOA_functions import plot_transects_on_basemap
 from LSDMOA_functions import Select_few_longest
 from LSDMOA_functions import Lines_to_shp
 from LSDMOA_functions import Generate_transects
+from LSDMOA_functions import Shp_to_lines
+
+
+
+
+
 
 def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
             Output_dir = "/Example_Data/Output/",
@@ -66,6 +73,59 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
     #TEST ZONE STARTS
     ######
 
+
+
+
+
+
+
+    def Transect_values (Lines_row, Lines_col, Envidata, Enviarray):
+        """
+        This function takes a basemap array and a line (or several lines) and returns the values of the cells that include part of the line. These values should be ordered by their distance to the centre of the transect.
+
+        Surely someone has made a similar function before.
+
+        You could also make a function that changes the line into an array selection and operate cell replacement. But this already exists and has been made by the guy who made the transect function (I think).
+
+        Args:
+            Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+            Outline_array (2D numpy array): a 2-D array destined to store the outline.
+            Outline_value (float): The value to be given to outline cells
+            Nodata_value (float): The value for empty cells
+
+        Returns:
+            Nothing. It just saves a bunch of shapefiles
+
+        Author: GCHG
+        """
+
+
+        return Lines_dist, Lines_value
+
+
+
+
+
+
+
+    """basemap_array = np.ones((3,3),dtype=np.float)
+    from random import randint
+    for i in range(len(basemap_array)):
+        for j in range(len(basemap_array[0])):
+            basemap_array[i,j] = basemap_array[i,j] * randint(1,5)
+    print 'This is the array'
+    print basemap_array
+
+
+    Lines_row = [[0,1]]
+    Lines_col = [[0,1]]
+    print 'This is the line'
+    print Lines_row, Lines_col
+
+
+    print
+
+    quit()"""
 
     ######
     #TEST ZONE ENDS
@@ -111,6 +171,11 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
 
         DEM = DEM [700:1300,100:600]
         Marsh = Marsh [700:1300,100:600]
+
+
+
+
+
 
 
 
@@ -198,8 +263,10 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         # STEP 2: Store the lines into shapefiles
         Lines_to_shp(nLines_row, nLines_col, envidata_DEM, DEM, Output_dir+'Shapefiles/', site)
 
-        # STEP 3: MAke the transects with that weird function
 
+
+        # STEP 3: Make the transects with that weird function
+        Transects_row = []; Transects_col = []
         # For each label
         for label in range(len(nLines_row)):
             print " \nThe label is:", label+1
@@ -207,6 +274,14 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
                 for code in range(len(nLines_row[label])):
                     print "  Saving code number ", code+1
                     Generate_transects(Output_dir+'Shapefiles/'+'%s_%s_%s.shp' % (site,label, code),Output_dir+'Shapefiles/'+'%s_%s_%s_Tr.shp' % (site,label, code), 10, 20)
+                    # STEP 4: Put the transect lines into our array reference system
+                    Transect_row, Transect_col = Shp_to_lines (Output_dir+"Shapefiles/", "WOR_domain_1_0_0_Tr", envidata_DEM, DEM)
+
+        print Transect_row
+
+        plot_transects_on_basemap(Transect_row, Transect_col, Outline_length, Output_dir+'Figures/', '09_Lines_DivAll_simple', Nodata_value)
+
+        quit()
 
 
         """

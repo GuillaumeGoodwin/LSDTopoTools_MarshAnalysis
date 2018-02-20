@@ -71,6 +71,9 @@ from osgeo import ogr
 from shapely.geometry import LineString
 
 
+import fiona
+
+
 import itertools
 
 ##########################################################################################################
@@ -1004,7 +1007,43 @@ def Lines_to_shp (Lines_row, Lines_col, Envidata, Enviarray, save_dir, site_name
                 # Save and close everything
                 ds = layer = feat = geom = None
 
+##########################################################################################################
+##########################################################################################################
+def Shp_to_lines (file_dir, file_name, Envidata, Enviarray):
+    """
+    This function takes all these masses of wriggly lines and turns each of them into a shapefile. This is going to take a lot of space, so we should probably think of deleting the shapefiles when we're done with them.
 
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Nothing. Lines
+
+    Author: GCHG
+    """
+    # Load the file
+    shape = fiona.open(file_dir+file_name+".shp")
+
+    # This s the environment of the raster
+    X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
+    Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
+
+    # initialise storage lists
+    Transect_row = []
+    Transect_col = []
+
+    for i in range(len(shape)):
+        attr = shape.next()
+        geometry = attr['geometry']
+        coordinates = geometry['coordinates']
+
+        Transect_row.append([(coordinates[0][1]-Y_origin)/Y_cell_width, (coordinates[1][1]-Y_origin)/Y_cell_width])
+        Transect_col.append([(coordinates[0][0]-X_origin)/X_cell_width, (coordinates[1][0]-X_origin)/X_cell_width])
+
+    return Transect_row, Transect_col
 
 
 ##########################################################################################################
@@ -1044,6 +1083,8 @@ def Generate_transects (in_shp,out_shp, spc, sect_len):
     # Length of cross-sections to calculate either side of central line
     # i.e. the total length will be twice the value entered here.
     # In the same co-ordinates as the original shapefile
+
+    #https://gis.stackexchange.com/questions/50108/elevation-profile-10-km-each-side-of-a-line
 
     # ##############################################################################
 
@@ -1103,9 +1144,6 @@ def Generate_transects (in_shp,out_shp, spc, sect_len):
     # Tidy up
     source.close()
     sink.close()
-
-################################################""
-
 
 
 
@@ -1171,7 +1209,63 @@ def plot_lines_on_basemap (Lines_row, Lines_col, Lines_dist, Lines_code, Basemap
     plt.savefig(save_dir+fig_name+'.png')
 
 
+##########################################################################################################
+##########################################################################################################
+def plot_transects_on_basemap (Lines_row, Lines_col, Basemap, save_dir, fig_name, Nodata_value):
+    """
+    This function calculates the length of several connected lines of connected cells in an Outline_array and returns lists of x,y coordinates (Line_x, Line_y) and length values (Line_dist) of the cells along the line.
 
+
+    There's a labeled array and a storage array
+
+    of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
+
+    Author: GCHG
+    """
+    from matplotlib.lines import Line2D
+    print 'Plotting a coup'
+    Nodata_value = -1000
+
+
+    twin  = Basemap.copy()
+
+    fig_height = min(np.floor(twin.shape[1])/5, 50)
+    fig_width = min(np.floor(twin.shape[1])/5, 50)
+
+    fig=plt.figure('Some Title', facecolor='White',figsize=[fig_height,fig_width])
+    ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=2)
+    ax1.tick_params(axis='x', colors='black')
+    ax1.tick_params(axis='y', colors='black')
+
+    Vmin = min(np.amin(twin[twin!=Nodata_value])*0.95, np.amin(twin[twin!=Nodata_value])*1.05)
+    Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
+
+    Map = ax1.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+    ax2 = fig.add_axes([0.1, 0.98, 0.85, 0.02])
+    scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
+    cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
+
+    for i in range(len(Lines_row)):
+        #for j in range(len(Lines_row[i])):
+
+        Scatt = ax1.scatter(Lines_col[i][0], Lines_row[i][0], marker  = '+', color = 'b')
+        Scatt2 = ax1.scatter(Lines_col[i][-1], Lines_row[i][-1], marker = 'x', color = 'r')
+
+        Line = Line2D(Lines_col[i], Lines_row[i], color = plt.cm.gist_earth(50), alpha = 0.5)
+        ax1.add_line(Line)
+
+    #ax1.set_xlim(0, len(Basemap)-1)
+    #ax1.set_ylim(len(Basemap[0])-1, 0)
+
+    plt.savefig(save_dir+fig_name+'.png')
 
 
 ##########################################################################################################

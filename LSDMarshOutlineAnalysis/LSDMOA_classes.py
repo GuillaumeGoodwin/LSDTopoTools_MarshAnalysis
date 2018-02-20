@@ -249,166 +249,31 @@ class Marsh_outline (Land_surface):
         return new_array, Lines_row, Lines_col, Lines_dist, Lines_code
 
 
-    
+
+
+##########################################################################################################
+##########################################################################################################
+class Point (tuple):
+    def __new__(self, x, y):
+       return tuple.__new__(Point, (x, y))
+
+##########################################################################################################
+##########################################################################################################
+class Line (list):
 
 
 
-
-
-    def swath (self, Buffer_around, Nodata_value):
-        new_array = self.copy()
-
-        Select = np.where(self == Buffer_around)
-
-        for i in range(len(Select[0])):
-            porthole_row, porthole_col, porthole_dist = fct.porthole (self, 3, Select[0][i], Select[1][i])
-
-            new_array[porthole_row,porthole_col] = porthole_dist
-
-
-
-        return new_array
-
-
-
-
-
-
-
-
-    """def calc_outline_length (self, Nodata_value):
-
-        This is a method that uses the two general functions:
-        -measure line length
-        -measure polyline length
-
-        Somehow you need to make sure it preserves the object type
-
-
-
-    array_2 = np.zeros(array.shape, dtype = np.float)
-    values = range (int(np.amin(array[array>0])), int(np.amax(array))+1, 1)
-
-    for val in range(len(values)):
-        print 'Value ', val+1, '/', len(values), ' (',values[val],')'
-
-        Lines_x = []
-        Lines_y = []
-        Lines_dist = []
-
-        #Measure all the lines
-        num_filled = 0
-        num_elements = len (np.where(array == values[val])[0])
-        while num_filled < num_elements:
-            array_2, Line_x, Line_y, Line_dist = Measure_line_length (array, array_2, values[val], Nodata_value)
-
-            Lines_x.append(Line_x)
-            Lines_y.append(Line_y)
-            Lines_dist.append(Line_dist)
-
-            num_filled = len (np.where(np.logical_and(array == values[val], array_2 !=0))[0])
-            print 'Number of filled elements = ', num_filled, '/', num_elements
-
-        #Stitch the lines
-        Bigline_x = []
-        Bigline_y = []
-        Bigline_dist = []
-
-        # Find the line number of the closest starting point to the x-edge (top wall)
-        min_x_dist = []
-        for i in range(len(Lines_x)):
-            min_x_dist.append(Lines_x[i][0]**2)
-            min_x_dist.append(Lines_x[i][-1]**2)
-
-        A = np.where (min_x_dist == min(min_x_dist)) [0][0]
-        print 'Start - line number:', A, 'distance:', np.sqrt(min(min_x_dist))
-        # Add this line to the Bigline
-        if (-1)**A >0:
-            print 'Start - coordinates: x = ', Lines_x[A/2][0], ', y = ', Lines_y[A/2][0]
-            for i in range(len(Lines_x[A/2])):
-                Bigline_x.append(Lines_x[A/2][i])
-                Bigline_y.append(Lines_y[A/2][i])
-                Bigline_dist.append(Lines_dist[A/2][i])
-            Lines_x.remove(Lines_x[A/2])
-            Lines_y.remove(Lines_y[A/2])
-            Lines_dist.remove(Lines_dist[A/2])
-        else:
-            # Be careful to reorder the Bigline by inverting the distances
-            A = A+1
-            print 'Start - coordinates: x = ', Lines_x[A/2][-1], ', y = ', Lines_y[A/2][-1]
-            for i in range(len(Lines_x[(A)/2])-1, 0, -1):
-                Bigline_x.append(Lines_x[A/2][i])
-                Bigline_y.append(Lines_y[A/2][i])
-                Bigline_dist.append(Lines_dist[A/2][len(Lines_x[(A)/2])-1-i])
-            Lines_x.remove(Lines_x[A/2])
-            Lines_y.remove(Lines_y[A/2])
-            Lines_dist.remove(Lines_dist[A/2])
-
-        print 'End - coordinates: x = ', Bigline_x[-1], ', y = ', Bigline_y[-1]
-        print 'End - distance: d = ', Bigline_dist[-1]
-
-
-        #for all the next bits:
-        while len(Bigline_x) < num_elements:
-            print 'Bigline length = ', len(Bigline_x), '/', num_elements
-            # Find the closest starting point to the origin
-            min_square_dist = []
-            for i in range(len(Lines_x)):
-                x_prev = Bigline_x[-1]
-                y_prev = Bigline_y[-1]
-                dist_prev = Bigline_dist[-1]
-
-                head_dist = (Lines_x[i][0]-x_prev)**2+(Lines_y[i][0]-y_prev)**2
-                tail_dist = (Lines_x[i][-1]-x_prev)**2+(Lines_y[i][-1]-y_prev)**2
-                min_square_dist.append(head_dist)
-                min_square_dist.append(tail_dist)
-
-            A = np.where (min_square_dist == min(min_square_dist)) [0][0]
-            print 'Next start - line number:', A, 'distance:', np.sqrt(min(min_square_dist))
-            print 'Next start - distance: d = ', Bigline_dist[-1]
-            # Add this line to the Bigline
-            if (-1)**A >0:
-                print 'Next start - coordinates: x = ', Lines_x[A/2][0], ', y = ', Lines_y[A/2][0]
-
-
-                figure out why they don't save the same thing...s
-                print len(Lines_x[A/2])
-                print len(Lines_y[A/2])
-                print len(Lines_dist[A/2])
-
-                for i in range(len(Lines_x[A/2])):
-                    Bigline_x.append(Lines_x[A/2][i])
-                    Bigline_y.append(Lines_y[A/2][i])
-                    Bigline_dist.append(Lines_dist[A/2][i] + dist_prev + min(min_square_dist))
-                Lines_x.remove(Lines_x[A/2])
-                Lines_y.remove(Lines_y[A/2])
-                Lines_dist.remove(Lines_dist[A/2])
-            else:
-                # Be careful to reorder the Bigline by inverting the distances
-                A = A+1
-                print 'Next start - coordinates: x = ', Lines_x[A/2][-1], ', y = ', Lines_y[A/2][-1]
-                for i in range(len(Lines_x[(A)/2])-1, 0, -1):
-                    Bigline_x.append(Lines_x[A/2][i])
-                    Bigline_y.append(Lines_y[A/2][i])
-                    Bigline_dist.append(Lines_dist[A/2][len(Lines_x[(A)/2])-1-i]+dist_prev+min(min_square_dist))
-                Lines_x.remove(Lines_x[A/2])
-                Lines_y.remove(Lines_y[A/2])
-                Lines_dist.remove(Lines_dist[A/2])
-            print 'End - coordinates: x = ', Bigline_x[-1], ', y = ', Bigline_y[-1]
-            print 'End - distance: d = ', Bigline_dist[-1]
-
-        for i in range(len(Bigline_x)):
-            array_2[Bigline_x[i], Bigline_y[i]] = Bigline_dist[i]
-
-        break
-
-
-
-    return array_2"""
-
-
-
-
+##########################################################################################################
+##########################################################################################################
+class Land_vector (Land_surface):
+    def __new__ (Marsh_outline, x_length, y_length):
+        print 'In __new__ with class %s' % Marsh_outline
+        return np.ndarray.__new__(Marsh_outline, shape=(x_length, y_length), dtype =np.float)
+    def __init__ (self, x_length, y_length):
+        self.X_length = x_length
+        self.Y_length = y_length
+        self[np.isnan(self)] = 0
+        self = 0 * self
 
 
 

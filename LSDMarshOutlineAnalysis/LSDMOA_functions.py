@@ -76,6 +76,9 @@ import fiona
 
 import itertools
 
+
+import LSDMOA_classes as cl
+
 ##########################################################################################################
 ##########################################################################################################
 def ENVI_raster_binary_to_2d_array(file_name):
@@ -451,23 +454,24 @@ def Line_length (Length_array, Labels_array, Code_array, Label_value, Scale, Cod
     """
     kernel_size = 3
 
-    Elements = np.where(Length_array == Label_value); num_elements = len (Elements[0])
-    # initialise lists of coordinates and length
-    Line_row = []; Line_col = []; Line_dist = []
+    Elements = np.where(Length_array == Label_value); num_elements = len(Elements[0])
+    # initialise line
+    This_line = cl.Line()
+    This_dist = []
 
     if num_elements > 0:
         #Add the the first point's coordinates to the lists (first = closest to the origin)
-        Line_row.append(Elements[0][0])
-        Line_col.append(Elements[1][0])
-        Line_dist.append(0.001*Scale) # the 0.001 is very important
+        First_point = cl.Point(Elements[0][0],Elements[1][0])
+        This_line.append(First_point); This_dist.append(0.001*Scale)
         #Change the lengths array to include the new distance
-        Length_array [Line_row[-1], Line_col[-1]] = Line_dist[-1]
+        Length_array [First_point.row(), First_point.col()] = This_dist[0]
         #Update the Code array
-        Code_array [Line_row[-1], Line_col[-1]] = Code
+        Code_array [First_point.row(), First_point.col()] = Code
 
         for t in range(1, num_elements):
             #Find the coordinates of the last point added
-            row = Line_row[-1]; col = Line_col[-1]
+            row = This_line.end_point().row(); col = This_line.end_point().col()
+
             #Make a kernel around that point
             K_lab, Kr_lab, Kc_lab = kernel (Labels_array, kernel_size, row, col)
             K_len, Kr_len, Kc_len = kernel (Length_array, kernel_size, row, col)
@@ -482,24 +486,22 @@ def Line_length (Length_array, Labels_array, Code_array, Label_value, Scale, Cod
                     Dist_to_previous = np.sqrt((ROW-row)**2+(COL-col)**2)
                     #We select the closest one to make sure we get all the points
                     Selected_next = np.where (Dist_to_previous == np.amin(Dist_to_previous[Dist_to_previous>0]))
-                    """if Short == False:
-                        Selected_next = np.where (Dist_to_previous == np.amin(Dist_to_previous[Dist_to_previous>0]))
-                    else:
-                        Selected_next = np.where (Dist_to_previous == np.amax(Dist_to_previous[Dist_to_previous>0]))"""
                     #Now we add these values to our list
-                    Next_row = ROW[Selected_next[0][0]]; Line_row.append(Next_row)
-                    Next_col = COL[Selected_next[0][0]]; Line_col.append(Next_col)
+                    Next_point = cl.Point(ROW[Selected_next[0][0]],COL[Selected_next[0][0]])
+                    This_line.append(Next_point)
                     # We also increase the distance
-                    Next_dist = Line_dist[-1] + Dist_to_previous[Selected_next[0][0]]; Line_dist.append(Next_dist)
+                    Next_dist = This_dist[-1] + Dist_to_previous[Selected_next[0][0]]; This_dist.append(Next_dist)
                     #Change the lengths array to include the new distance
-                    Length_array [Next_row, Next_col] = Next_dist
+                    Length_array [Next_point.row(), Next_point.col()] = Next_dist
                     #Record the code for that line
-                    Code_array [Next_row, Next_col] = Code
+                    Code_array [Next_point.row(), Next_point.col()] = Code
                     break
 
-        Filled_elements = len(Line_dist)
+        Filled_elements = len(This_dist)
 
-    return Length_array, Line_row, Line_col, Line_dist, Code_array, Filled_elements
+    This_line.append(This_dist)
+
+    return This_line, Length_array, Code_array, Filled_elements
 
 
 
@@ -530,16 +532,18 @@ def Measure_all_lines (Labels_array, Label_value, Scale):
     Elements = np.where(Labels_array == Label_value); num_elements = len (Elements[0])
     print ' This label has ', num_elements, ' elements'
 
-    #Initialise the lists to store the info about the lines
-    Lines_row = []; Lines_col = []; Lines_dist = []; Lines_code = []
+    #Initialise the lists to store point object in the lines
+    This_polyline = cl.Polyline()
+    print type(This_polyline)
     # Initialise the number of elements filled and the counter for the line code
     Filled_total = 0; code = 1
     #THIS IS THE BIT WHERE YOU CALCULATE THE LENGTH OF EACH INDIVIDUAL LINE
     while Filled_total < num_elements:
         # Calculate the length of each squiggly line (which may stop abruptly)
-        Length_array, Line_row, Line_col, Line_dist, Code_array, Filled_elements = Line_length (Length_array, Labels_array, Code_array, Label_value, Scale, code)
+        This_line, Length_array, Code_array, Filled_elements = Line_length (Length_array, Labels_array, Code_array, Label_value, Scale, code)
+        This_line.append(code)
         #add to the lists of all the line coordinates, lengths, and code
-        Lines_row.append(Line_row); Lines_col.append(Line_col); Lines_dist.append(Line_dist); Lines_code.append(code)
+        This_polyline.append(This_line)
         # Keep track of filled elements
         Filled_total = Filled_total + Filled_elements
         print '  Number of filled elements: ', Filled_total, '/', num_elements, ' (code:' , code ,')'
@@ -548,13 +552,13 @@ def Measure_all_lines (Labels_array, Label_value, Scale):
     # Reduce to 0 the elements that were not filled
     Length_array[Length_array == Label_value] = 0
 
-    return Length_array, Lines_row, Lines_col, Lines_dist, Lines_code, Code_array
+    return This_polyline, Length_array, Code_array
 
 
 
 ##########################################################################################################
 ##########################################################################################################
-def Stitch_diverging_starts (Length_array, Labels_array, Label_value, Lines_row, Lines_col, Lines_dist, Lines_code, Code_array, Scale):
+def Stitch_diverging_starts (Length_array, Labels_array, Label_value, This_polyline, Code_array, Scale):
     """
     This function stitches lines that start at neighbouring points
 
@@ -577,27 +581,29 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, Lines_row,
     print "We are looking for divergent line starts"
 
     kernel_size = 3
-
     Indices_to_clean = []
 
-    # For each line
-    for i in range(len(Lines_row)):
+    # For each line in the polyline
+    for i in range(len(This_polyline)):
+        This_line = This_polyline[i]
+        #See how long each line is is.
+        Counter = 0
+        for j in range(len(This_line)):
+            if type(This_line[j]) is cl.Point:
+                Counter += 1
+
         #If this is not a 1-pixel-long line:
-        if len(Lines_row[i])>1:
+        if Counter>1:
             # Find the starting point
-            Startpoint_row = Lines_row[i][0]; Startpoint_col = Lines_col[i][0]
+            Startpoint_row = This_line.start_point()[0]; Startpoint_col = This_line.start_point()[1]
             # Make kernels around the starting point
             sK_lab, sKr_lab, sKc_lab = kernel (Labels_array, kernel_size, Startpoint_row, Startpoint_col)
             sK_len, sKr_len, sKc_len = kernel (Length_array, kernel_size, Startpoint_row, Startpoint_col)
             sK_cod, sKr_cod, sKc_cod = kernel (Code_array, kernel_size, Startpoint_row, Startpoint_col)
-            #Also find its end point
-            Endpoint_row = Lines_row[i][-1]; Endpoint_col = Lines_col[i][-1]
-            # Make kernels around the end point
-            eK_lab, eKr_lab, eKc_lab = kernel (Labels_array, kernel_size, Endpoint_row, Endpoint_col)
-            eK_len, eKr_len, eKc_len = kernel (Length_array, kernel_size, Endpoint_row, Endpoint_col)
-            eK_cod, eKr_cod, eKc_cod = kernel (Code_array, kernel_size, Endpoint_row, Endpoint_col)
+
             # Also retrieve the line's code
-            This_line_code = Code_array[Startpoint_row, Startpoint_col]; This_line_code_index = np.where(Lines_code == This_line_code)[0]
+            This_line_code = Code_array[Startpoint_row, Startpoint_col]
+            This_line_code_index = This_line_code - 1
 
             #Tell something to the confused user
             print '\nLine starts (', Startpoint_row, Startpoint_col, ').', 'Code is :' , int(This_line_code)
@@ -623,38 +629,59 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, Lines_row,
                     Distance = np.sqrt((First_line_row-Second_line_row)**2 + (First_line_col-Second_line_col)**2)
                     # Find the code associated to those two points
                     First_line_code = Code_array[First_line_row, First_line_col]; Second_line_code = Code_array[Second_line_row, Second_line_col]
+                    print ".......connected code are ", First_line_code, Second_line_code
+                    print sK_cod
                     # Select the two lines that go with these codes
-                    First_line_index = np.where(Lines_code == First_line_code)[0][0]; Second_line_index = np.where(Lines_code == Second_line_code)[0][0]
+                    First_line_index = int(First_line_code)-1; Second_line_index = int(Second_line_code)-1
+
+                    Second_Counter = 0
+                    for j in range(len(This_polyline[Second_line_index])):
+                        if type(This_polyline[Second_line_index][j]) is cl.Point:
+                            Second_Counter += 1
                     # Reverse the second line (arbitrary)
-                    Lines_row[Second_line_index] = list(reversed(np.asarray(Lines_row[Second_line_index])))
-                    Lines_col[Second_line_index] = list(reversed(np.asarray(Lines_col[Second_line_index])))
+                    This_polyline[Second_line_index][:Second_Counter] = reversed(This_polyline[Second_line_index][:Second_Counter])
 
                     #Make sure it's not one of those short lines
-                    if len(Lines_dist[Second_line_index]) > 1:
+                    if len(This_polyline[Second_line_index][:Second_Counter]) > 1:
                         # Add the extra distance values to the first line
-                        Lines_dist[First_line_index] = (np.asarray(Lines_dist[First_line_index]) + Lines_dist[Second_line_index][-1] + Distance).tolist()
+                        This_polyline[First_line_index][-2] = (np.asarray(This_polyline[First_line_index][-2]) + This_polyline[Second_line_index][-2][-1] + Distance).tolist()
                         # Stitch the lines
-                        Lines_dist[Second_line_index] = Lines_dist[Second_line_index] + Lines_dist[First_line_index]
-                        Lines_code[Second_line_index] = Lines_code[First_line_index]
-                        Lines_row[Second_line_index] = Lines_row[Second_line_index] + Lines_row[First_line_index]
-                        Lines_col[Second_line_index] = Lines_col[Second_line_index] + Lines_col[First_line_index]
-                        # Update the length array
-                        Length_array[Lines_row[Second_line_index], Lines_col[Second_line_index]] = Lines_dist[Second_line_index]
-                        Code_array[Lines_row[Second_line_index], Lines_col[Second_line_index]] = Lines_code[Second_line_index]
+                        This_polyline[Second_line_index][-2] = This_polyline[Second_line_index][-2] + This_polyline[First_line_index][-2]
+                        This_polyline[Second_line_index][-1] = First_line_code
+                        This_polyline[Second_line_index][:-2] = This_polyline[Second_line_index][:-2] + This_polyline[First_line_index][:-2]
 
+                        # Update the length array
+                        Line_row = []; Line_col = []
+                        for i in range(len(This_polyline[Second_line_index][:Second_Counter+Counter])):
+                            Line_row.append(This_polyline[Second_line_index][i][0])
+                            Line_col.append(This_polyline[Second_line_index][i][1])
+
+                        Length_array[Line_row, Line_col] = This_polyline[Second_line_index][-2]
+                        Code_array[Line_row, Line_col] = First_line_code
                         Indices_to_clean.append(First_line_index)
 
     #Now rid of the lines that have become redundant
-    for i in Indices_to_clean:
-        del Lines_row[i]; del Lines_col[i]; del Lines_dist[i]; del Lines_code[i]
+    for i in reversed(Indices_to_clean):
+        del This_polyline[i]
 
-    return Length_array, Lines_row, Lines_col, Lines_dist, Lines_code
+    # And reset the codes for the remaining lines.
+    for i in range(len(This_polyline)):
+        This_polyline[i][-1] = i+1
+        Line_row = []; Line_col = []
+        for j in range(len(This_polyline[i][:-2])):
+            Line_row.append(This_polyline[i][j][0])
+            Line_col.append(This_polyline[i][j][1])
+
+        Code_array[Line_row, Line_col] = i+1
+
+
+    return This_polyline, Length_array, Code_array
 
 
 
 ##########################################################################################################
 ##########################################################################################################
-def Graft_diverging_branch (Length_array, Labels_array, Label_value, Lines_row, Lines_col, Lines_dist, Lines_code, Code_array, Scale):
+def Graft_diverging_branch (Length_array, Labels_array, Label_value, This_polyline, Code_array, Scale):
     """
     This function stitches a line that has its starting point in contact with another line that is already on its way.
 
@@ -678,24 +705,32 @@ def Graft_diverging_branch (Length_array, Labels_array, Label_value, Lines_row, 
 
     kernel_size = 3
 
-    # For each line
-    for i in range(len(Lines_row)):
+    # For each line in the polyline
+    for i in range(len(This_polyline)):
+        This_line = This_polyline[i]
+        #See how long each line is is.
+        Counter = 0
+        for j in range(len(This_line)):
+            if type(This_line[j]) is cl.Point:
+                Counter += 1
+
         #If this is not a 1-pixel-long line:
-        if len(Lines_row[i])>1:
+        if Counter>1:
             # Find the starting point
-            Startpoint_row = Lines_row[i][0]; Startpoint_col = Lines_col[i][0]
+            Startpoint_row = This_line.start_point()[0]; Startpoint_col = This_line.start_point()[1]
             # Make kernels around the starting point
             sK_lab, sKr_lab, sKc_lab = kernel (Labels_array, kernel_size, Startpoint_row, Startpoint_col)
             sK_len, sKr_len, sKc_len = kernel (Length_array, kernel_size, Startpoint_row, Startpoint_col)
             sK_cod, sKr_cod, sKc_cod = kernel (Code_array, kernel_size, Startpoint_row, Startpoint_col)
             #Also find its end point
-            Endpoint_row = Lines_row[i][-1]; Endpoint_col = Lines_col[i][-1]
+            Endpoint_row = This_line.end_point()[0]; Endpoint_col = This_line.end_point()[1]
             # Make kernels around the end point
             eK_lab, eKr_lab, eKc_lab = kernel (Labels_array, kernel_size, Endpoint_row, Endpoint_col)
             eK_len, eKr_len, eKc_len = kernel (Length_array, kernel_size, Endpoint_row, Endpoint_col)
             eK_cod, eKr_cod, eKc_cod = kernel (Code_array, kernel_size, Endpoint_row, Endpoint_col)
             # Also retrieve the line's code
-            This_line_code = Code_array[Startpoint_row, Startpoint_col]; This_line_code_index = np.where(Lines_code == This_line_code)[0][0]
+            This_line_code = Code_array[Startpoint_row, Startpoint_col]
+            This_line_code_index = This_line_code-1
 
             #Tell something to the confused user
             print '\nLine starts (', Startpoint_row, Startpoint_col, ').', 'Code is :' , int(This_line_code)
@@ -709,7 +744,7 @@ def Graft_diverging_branch (Length_array, Labels_array, Label_value, Lines_row, 
             # If it's connected at the start
             if len(sK_len[Touches_start[:][0]]) > 0 and np.count_nonzero(sK_cod[Touches_start[:][0]]) > 0 :
                 print '.....This line connects to another at its starting point.'
-                # Find the (ironically) biggest distance in that subset and where it is in the array
+                # Find the (ironically named) biggest distance in that subset and where it is in the array
                 Smallest_dist = np.amax (sK_len[Touches_start]); Smallest_dist_index = np.where(sK_len == Smallest_dist)
 
                 # If the shortest distance is NOT  beginning of a line:
@@ -718,35 +753,55 @@ def Graft_diverging_branch (Length_array, Labels_array, Label_value, Lines_row, 
                     # Find the coordinates and distance of the connecting point on the other line
                     This_line_row = Startpoint_row; This_line_col = Startpoint_col
                     Other_line_row = sKr_len[Smallest_dist_index[0][0]]; Other_line_col = sKc_len[Smallest_dist_index[1][0]]
+
                     #Find out how far apart they are
                     Distance = np.sqrt((Other_line_row-This_line_row)**2 + (Other_line_col-This_line_col)**2)
                     # Find the codes
                     This_line_code = Code_array[This_line_row, This_line_col]
                     Other_line_code = Code_array[Other_line_row, Other_line_col]
+
                     # Now find the line indices
-                    This_line_index = np.where(Lines_code == This_line_code)[0][0]; Other_line_index = np.where(Lines_code == Other_line_code)[0][0]
+                    This_line_index = int(This_line_code)-1; Other_line_index = int(Other_line_code)-1
 
                     # Find the right distance along the other line
-                    Distance_index = np.where(Lines_dist[Other_line_index] == Smallest_dist)[0][0]
+
+                    print sK_len
+                    print sK_lab
+                    print sK_cod
+
+                    print This_line_index, Other_line_index
+                    print This_polyline[This_line_index][-2]
+                    print This_polyline[Other_line_index][-2]
+                    print Smallest_dist
+
+                    Distance_index = np.where(This_polyline[Other_line_index][-2] == Smallest_dist)[0][0]
 
                     #Prepare to append the other line
-                    Dist_to_append = Lines_dist[Other_line_index][0:Distance_index+1]
-                    Row_to_append = Lines_row[Other_line_index][0:Distance_index+1]
-                    Col_to_append = Lines_col[Other_line_index][0:Distance_index+1]
+                    Dist_to_append = This_polyline[Other_line_index][-2][0:Distance_index+1]
+                    Coord_to_append = This_polyline[Other_line_index][0:Distance_index+1]
+
                     #If there's something to append
                     if len(Dist_to_append) > 1:
                         #Add the correct distances
-                        Lines_dist[This_line_index] = (np.asarray(Lines_dist[This_line_index]) + Dist_to_append[-1] + Distance).tolist()
+                        This_polyline[This_line_index][-2] = (np.asarray(This_polyline[This_line_index][-2]) + Dist_to_append[-1] + Distance).tolist()
+
                         # Stitch the lines
-                        Lines_dist[This_line_index] = Dist_to_append + Lines_dist[This_line_index]
-                        #Lines_code[This_line_index] = Dist_to_append + Lines_dist[This_line_index]
-                        Lines_row[This_line_index] = Row_to_append + Lines_row[This_line_index]
-                        Lines_col[This_line_index] = Col_to_append + Lines_col[This_line_index]
+                        This_polyline[This_line_index][-2] = Dist_to_append + This_polyline[This_line_index][-2]
+
+                        This_polyline[This_line_index][:-2] = Coord_to_append + This_polyline[This_line_index][:-2]
+
                         #Update the arrays
-                        Length_array[Lines_row[This_line_index], Lines_col[This_line_index]] = Lines_dist[This_line_index]
+                        Line_row = []; Line_col = []
+                        for i in range(len(This_polyline[This_line_index][:-2])):
+                            Line_row.append(This_polyline[This_line_index][i][0])
+                            Line_col.append(This_polyline[This_line_index][i][1])
+
+                        Length_array[Line_row, Line_col] = This_polyline[This_line_index][-2]
                         #Code_array[Lines_row[This_line_index], Lines_col[This_line_index]] = This_line_code
 
-    return Length_array, Lines_row, Lines_col, Lines_dist, Lines_code
+
+
+    return This_polyline, Length_array
 
 
 
@@ -875,7 +930,7 @@ def Graft_converging_branch (Length_array, Labels_array, Label_value, Lines_row,
 
 ##########################################################################################################
 ##########################################################################################################
-def Select_few_longest (Lines_row, Lines_col, Lines_dist, Lines_code):
+def Select_few_longest (Polylines):
     """
     This function selects the longest lines in a set of polylines. The longest line within a set sharing the same origin is selected.
     The structure for each list is: 1st index = label; 2nd index = code; 3rd index = position on line
@@ -898,58 +953,55 @@ def Select_few_longest (Lines_row, Lines_col, Lines_dist, Lines_code):
 
     # Instead of deleting, store the selected things in a new array. it's easier.
     # Initialise the new lines
-    nLines_row = []; nLines_col = []; nLines_dist = []; nLines_code = []
-
+    new_Polylines = cl.Polyline()
     # For each label
-    for label in range(len(Lines_row)):
+    for label in range(len(Polylines)):
         print " \nThe label is:", label+1
-        # Initialise the list of indices to keep
-        nLine_row = [[0, 0]]; nLine_col = [[0, 0]]; nLine_dist = [[0, 0]]; nLine_code = [[0]]
-        if len(Lines_row[label]) > 0:
-            for code in range(len(Lines_code[label])):
-                Origin = [Lines_row[label][code][0], Lines_col[label][code][0]]
-                print "   The code is:", Lines_code[label][code]
-                print "    Line origin:", Origin,"; Line length:", Lines_dist[label][code][-1]
-                # if the origins are the same as a set of origins in the selected set:
-                Origin = [Lines_row[label][code][0], Lines_col[label][code][0]]
-                Rep_origin = []
-                for i in range(len(nLine_row)):
-                    Rep_origin.append([nLine_row[i][0], nLine_col[i][0]])
+        # Initialise a list of indices to keep
+        # Its first version is a dummy.
+        This_new_polyline = cl.Polyline()
+        This_new_polyline.append([cl.Point(0,0),[0], 0])
 
-                #print Rep_origin
+        if len(Polylines[label]) > 0:
+            for code in range(len(Polylines[label])):
+                # This is the origin of this line in the label
+                Origin = Polylines[label][code][0]
+                #print "   The code is:", Polylines[label][code][-1]
+                #print "    Line origin:", Origin,"; Line length:", Polylines[label][code][-2][-1]
 
-                Matching_origin = [item for item in Rep_origin if item == Origin]
+                # Make a list of all the origin points in the new storage polyline for this label
+                Origins_list = []
+                for i in range(len(This_new_polyline)):
+                    Origins_list.append(This_new_polyline[i][0])
+                #Find origins in the Origins list that match that of the examined line
+                Matching_origin = [item for item in Origins_list if item == Origin]
 
-                #print Matching_origin
-
+                # If our origin matches that storage polyline
                 if len(Matching_origin) > 0 :
+                    print "   The code is:", Polylines[label][code][-1]
+                    print "    Line origin:", Origin,"; Line length:", Polylines[label][code][-2][-1]
                     print "     matching origins:", Matching_origin
-                    Matching_origin_id = Rep_origin.index(Matching_origin[0])
+                    Matching_origin_id = Origins_list.index(Matching_origin[0])
                     # Compare lengths between the line examined and the stored one:
-                    if Lines_dist[label][code][-1] > nLine_dist[Matching_origin_id][-1]:
+                    if Polylines[label][code][-2][-1] > This_new_polyline[Matching_origin_id][-2][-1]:
                         # The longest line takes the spot in the list
-                        nLine_row[Matching_origin_id] = Lines_row[label][code]
-                        nLine_col[Matching_origin_id] = Lines_col[label][code]
-                        nLine_dist[Matching_origin_id] = Lines_dist[label][code]
-                        nLine_code[Matching_origin_id] = Lines_code[label][code]
+                        This_new_polyline[Matching_origin_id] = Polylines[label][code]
 
                 # if these origins are not in the set:
                 else:
                     # We're not adding really small lines
-                    if len(Lines_row[label][code]) > 1:
+                    if len(Polylines[label][code][-2]) > 1:
                         print "     tis a new line"
                         # Add the line to the selected set.
-                        nLine_row.append(Lines_row[label][code])
-                        nLine_col.append(Lines_col[label][code])
-                        nLine_dist.append(Lines_dist[label][code])
-                        nLine_code.append(Lines_code[label][code])
+                        This_new_polyline.append(Polylines[label][code])
 
-            del nLine_row[0]; del nLine_col[0];  del nLine_dist[0];  del nLine_code[0]
+        # Get rid of the dummy
+        del This_new_polyline[0]
 
-        # Store the result in the new lines
-        nLines_row.append(nLine_row); nLines_col.append(nLine_col); nLines_dist.append(nLine_dist); nLines_code.append(nLine_code)
+        # Store the result in the new big polylines list
+        new_Polylines.append(This_new_polyline)
 
-    return nLines_row, nLines_col, nLines_dist, nLines_code
+    return new_Polylines
 
 
 
@@ -957,7 +1009,7 @@ def Select_few_longest (Lines_row, Lines_col, Lines_dist, Lines_code):
 
 ##########################################################################################################
 ##########################################################################################################
-def Lines_to_shp (Lines_row, Lines_col, Envidata, Enviarray, save_dir, site_name):
+def Line_to_shp (line, Envidata, Enviarray, save_dir, file_name):
     """
     This function takes all these masses of riggly lines and turns each of them into a shapefile. This is going to take a lot of space, so we should probably think of deleting the shapefiles when we're done with them.
 
@@ -975,37 +1027,31 @@ def Lines_to_shp (Lines_row, Lines_col, Envidata, Enviarray, save_dir, site_name
     X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
     Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
 
-    # For each label
-    for label in range(len(Lines_row)):
-        print " \nThe label is:", label+1
-        if len(Lines_row[label]) > 0:
-            for code in range(len(Lines_row[label])):
-                print "  Saving code number ", code+1
-                Coordinates = []
-                for i in range(len(Lines_row[label][code])):
-                    coord_pair = (X_cell_width*Lines_col[label][code][i]+X_origin, Y_cell_width*Lines_row[label][code][i]+Y_origin)
-                    Coordinates.append(coord_pair)
-                # Here's an example Shapely geometry
-                poly = LineString(Coordinates)
-                # Now convert it to a shapefile with OGR
-                driver = ogr.GetDriverByName('Esri Shapefile')
-                ds = driver.CreateDataSource('%s/%s_%s_%s.shp' % (save_dir,site_name,label, code))
-                #ds = driver.CreateDataSource(save_dir+str(label)+'_'+str(code)+'.shp')
-                layer = ds.CreateLayer('', None, ogr.wkbLineString)
-                # Add one attribute
-                layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
-                defn = layer.GetLayerDefn()
-                ## If there are multiple geometries, put the "for" loop here
-                # Create a new feature (attribute and geometry)
-                feat = ogr.Feature(defn)
-                feat.SetField('id', 123)
-                # Make a geometry, from Shapely object
-                geom = ogr.CreateGeometryFromWkb(poly.wkb)
-                feat.SetGeometry(geom)
-                layer.CreateFeature(feat)
-                feat = geom = None  # destroy these
-                # Save and close everything
-                ds = layer = feat = geom = None
+    Coordinates = []
+    for i in range(len(line[:-2])):
+        coord_pair = (X_cell_width*line[i][1]+X_origin, Y_cell_width*line[i][0]+Y_origin)
+        Coordinates.append(coord_pair)
+    # Here's an example Shapely geometry
+    poly = LineString(Coordinates)
+    # Now convert it to a shapefile with OGR
+    driver = ogr.GetDriverByName('Esri Shapefile')
+    ds = driver.CreateDataSource('%s/%s.shp' % (save_dir,file_name))
+    #ds = driver.CreateDataSource(save_dir+str(label)+'_'+str(code)+'.shp')
+    layer = ds.CreateLayer('', None, ogr.wkbLineString)
+    # Add one attribute
+    layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
+    defn = layer.GetLayerDefn()
+    ## If there are multiple geometries, put the "for" loop here
+    # Create a new feature (attribute and geometry)
+    feat = ogr.Feature(defn)
+    feat.SetField('id', 123)
+    # Make a geometry, from Shapely object
+    geom = ogr.CreateGeometryFromWkb(poly.wkb)
+    feat.SetGeometry(geom)
+    layer.CreateFeature(feat)
+    feat = geom = None  # destroy these
+    # Save and close everything
+    ds = layer = feat = geom = None
 
 ##########################################################################################################
 ##########################################################################################################
@@ -1032,23 +1078,29 @@ def Shp_to_lines (file_dir, file_name, Envidata, Enviarray):
     Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
 
     # initialise storage lists
-    Transect_row = []
-    Transect_col = []
+    Transects = cl.Polyline()
 
     for i in range(len(shape)):
         attr = shape.next()
         geometry = attr['geometry']
         coordinates = geometry['coordinates']
 
-        Transect_row.append([(coordinates[0][1]-Y_origin)/Y_cell_width, (coordinates[1][1]-Y_origin)/Y_cell_width])
-        Transect_col.append([(coordinates[0][0]-X_origin)/X_cell_width, (coordinates[1][0]-X_origin)/X_cell_width])
+        Start_row = (coordinates[0][1]-Y_origin)/Y_cell_width
+        End_row = (coordinates[1][1]-Y_origin)/Y_cell_width
+        Start_col = (coordinates[0][0]-X_origin)/X_cell_width
+        End_col = (coordinates[1][0]-X_origin)/X_cell_width
 
-    return Transect_row, Transect_col
+        Transect = cl.Line()
+        Transect.append(cl.Point(Start_row,Start_col)); Transect.append(cl.Point(End_row,End_col))
+
+        Transects.append(Transect)
+
+    return Transects
 
 
 ##########################################################################################################
 ##########################################################################################################
-def Generate_transects (in_shp,out_shp, spc, sect_len):
+def Save_transects (in_shp,out_shp, spc, sect_len):
     #-------------------------------------------------------------------------------
     # Name:        perp_lines.py
     # Purpose:     Generates multiple profile lines perpendicular to an input line
@@ -1148,67 +1200,6 @@ def Generate_transects (in_shp,out_shp, spc, sect_len):
 
 
 
-
-
-##########################################################################################################
-##########################################################################################################
-def plot_lines_on_basemap (Lines_row, Lines_col, Lines_dist, Lines_code, Basemap, save_dir, fig_name, Nodata_value):
-    """
-    This function calculates the length of several connected lines of connected cells in an Outline_array and returns lists of x,y coordinates (Line_x, Line_y) and length values (Line_dist) of the cells along the line.
-
-
-    There's a labeled array and a storage array
-
-    of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
-    Args:
-        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
-        Outline_array (2D numpy array): a 2-D array destined to store the outline.
-        Outline_value (float): The value to be given to outline cells
-        Nodata_value (float): The value for empty cells
-
-    Returns:
-        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
-
-    Author: GCHG
-    """
-    from matplotlib.lines import Line2D
-    print 'Plotting a coup'
-    Nodata_value = -1000
-
-
-    twin  = Basemap.copy()
-
-    fig_height = min(np.floor(twin.shape[1])/5, 50)
-    fig_width = min(np.floor(twin.shape[1])/5, 50)
-
-    fig=plt.figure('Some Title', facecolor='White',figsize=[fig_height,fig_width])
-    ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=2)
-    ax1.tick_params(axis='x', colors='black')
-    ax1.tick_params(axis='y', colors='black')
-
-    Vmin = min(np.amin(twin[twin!=Nodata_value])*0.95, np.amin(twin[twin!=Nodata_value])*1.05)
-    Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
-
-    Map = ax1.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
-    ax2 = fig.add_axes([0.1, 0.98, 0.85, 0.02])
-    scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
-    cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
-
-    for i in range(len(Lines_row)):
-        for j in range(len(Lines_row[i])):
-
-            Scatt = ax1.scatter(Lines_col[i][j][0], Lines_row[i][j][0], marker  = '+', color = 'b')
-            Scatt2 = ax1.scatter(Lines_col[i][j][-1], Lines_row[i][j][-1], marker = 'x', color = 'r')
-
-            Line = Line2D(Lines_col[i][j], Lines_row[i][j], color = plt.cm.gist_earth(50*Lines_code[i][j]), alpha = 0.5)
-            ax1.add_line(Line)
-
-    #ax1.set_xlim(0, len(Basemap)-1)
-    #ax1.set_ylim(len(Basemap[0])-1, 0)
-
-    plt.savefig(save_dir+fig_name+'.png')
-
-
 ##########################################################################################################
 ##########################################################################################################
 def plot_transects_on_basemap (Lines_row, Lines_col, Basemap, save_dir, fig_name, Nodata_value):
@@ -1268,175 +1259,21 @@ def plot_transects_on_basemap (Lines_row, Lines_col, Basemap, save_dir, fig_name
     plt.savefig(save_dir+fig_name+'.png')
 
 
-##########################################################################################################
-##########################################################################################################
-def Stitch_lines (Lines_row, Lines_col, Lines_dist):
-    """
-    This function stitches several squiggly lines, in the form of lists of coordinates, into one big squiggly line ^^
 
 
-    This function takes all the short lines and makes them into loads of massive lines
 
 
-    There's a labeled array and a storage array
 
-    of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
-    Args:
-        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
-        Outline_array (2D numpy array): a 2-D array destined to store the outline.
-        Outline_value (float): The value to be given to outline cells
-        Nodata_value (float): The value for empty cells
 
-    Returns:
-        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
 
-    Author: GCHG
-    """
 
-    Bigline_row = []; Bigline_col = []; Bigline_dist = []
 
-    # Find the line number of the closest starting point to the x-edge (top wall)
-    min_x_dist = []
-    for i in range(len(Lines_x)):
-        min_x_dist.append(Lines_x[i][0]**2)
-        min_x_dist.append(Lines_x[i][-1]**2)
 
-    A = np.where (min_x_dist == min(min_x_dist)) [0][0]
-    print 'Start - line number:', A, 'distance:', np.sqrt(min(min_x_dist))
-    # Add this line to the Bigline
-    if (-1)**A >0:
-        print 'Start - coordinates: x = ', Lines_x[A/2][0], ', y = ', Lines_y[A/2][0]
-        for i in range(len(Lines_x[A/2])):
-            Bigline_x.append(Lines_x[A/2][i])
-            Bigline_y.append(Lines_y[A/2][i])
-            Bigline_dist.append(Lines_dist[A/2][i])
-        Lines_x.remove(Lines_x[A/2])
-        Lines_y.remove(Lines_y[A/2])
-        Lines_dist.remove(Lines_dist[A/2])
-    else:
-        # Be careful to reorder the Bigline by inverting the distances
-        A = A+1
-        print 'Start - coordinates: x = ', Lines_x[A/2][-1], ', y = ', Lines_y[A/2][-1]
-        for i in range(len(Lines_x[(A)/2])-1, 0, -1):
-            Bigline_x.append(Lines_x[A/2][i])
-            Bigline_y.append(Lines_y[A/2][i])
-            Bigline_dist.append(Lines_dist[A/2][len(Lines_x[(A)/2])-1-i])
-        Lines_x.remove(Lines_x[A/2])
-        Lines_y.remove(Lines_y[A/2])
-        Lines_dist.remove(Lines_dist[A/2])
 
-    print 'End - coordinates: x = ', Bigline_x[-1], ', y = ', Bigline_y[-1]
-    print 'End - distance: d = ', Bigline_dist[-1]
 
 
-    #for all the next bits:
-    while len(Bigline_x) < num_elements:
-        print 'Bigline length = ', len(Bigline_x), '/', num_elements
-        # Find the closest starting point to the origin
-        min_square_dist = []
-        for i in range(len(Lines_x)):
-            x_prev = Bigline_x[-1]
-            y_prev = Bigline_y[-1]
-            dist_prev = Bigline_dist[-1]
 
-            head_dist = (Lines_x[i][0]-x_prev)**2+(Lines_y[i][0]-y_prev)**2
-            tail_dist = (Lines_x[i][-1]-x_prev)**2+(Lines_y[i][-1]-y_prev)**2
-            min_square_dist.append(head_dist)
-            min_square_dist.append(tail_dist)
 
-        A = np.where (min_square_dist == min(min_square_dist)) [0][0]
-        print 'Next start - line number:', A, 'distance:', np.sqrt(min(min_square_dist))
-        print 'Next start - distance: d = ', Bigline_dist[-1]
-        # Add this line to the Bigline
-        if (-1)**A >0:
-            print 'Next start - coordinates: x = ', Lines_x[A/2][0], ', y = ', Lines_y[A/2][0]
-
-
-
-
-
-
-
-
-            """figure out why they don't save the same thing...s"""
-            print len(Lines_x[A/2])
-            print len(Lines_y[A/2])
-            print len(Lines_dist[A/2])
-
-            for i in range(len(Lines_x[A/2])):
-                Bigline_x.append(Lines_x[A/2][i])
-                Bigline_y.append(Lines_y[A/2][i])
-                Bigline_dist.append(Lines_dist[A/2][i] + dist_prev + min(min_square_dist))
-            Lines_x.remove(Lines_x[A/2])
-            Lines_y.remove(Lines_y[A/2])
-            Lines_dist.remove(Lines_dist[A/2])
-        else:
-            # Be careful to reorder the Bigline by inverting the distances
-            A = A+1
-            print 'Next start - coordinates: x = ', Lines_x[A/2][-1], ', y = ', Lines_y[A/2][-1]
-            for i in range(len(Lines_x[(A)/2])-1, 0, -1):
-                Bigline_x.append(Lines_x[A/2][i])
-                Bigline_y.append(Lines_y[A/2][i])
-                Bigline_dist.append(Lines_dist[A/2][len(Lines_x[(A)/2])-1-i]+dist_prev+min(min_square_dist))
-            Lines_x.remove(Lines_x[A/2])
-            Lines_y.remove(Lines_y[A/2])
-            Lines_dist.remove(Lines_dist[A/2])
-        print 'End - coordinates: x = ', Bigline_x[-1], ', y = ', Bigline_y[-1]
-        print 'End - distance: d = ', Bigline_dist[-1]
-
-        for i in range(len(Bigline_x)):
-            array_2[Bigline_x[i], Bigline_y[i]] = Bigline_dist[i]
-
-        break
-
-
-
-    return array_2
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def Polyline_length (Labels_array, Label_value, Scale):
-
-
-    print 'This is the label value: ', Label_value
-
-    Elements = np.where(Labels_array == Label_value)
-    num_elements = len (Elements[0])
-    Used_elements = 0
-
-    print 'This label has ', num_elements, ' elements'
-
-
-    while Used_elements < num_elements:
-
-        Remaining_elements = np.where(Labels_array == Label_value)
-        num_remaining = len (Remaining_elements[0])
-
-
-
-        Length_array, Line_row, Line_col, Line_dist
 
 
 

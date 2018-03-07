@@ -73,6 +73,7 @@ from shapely.geometry import LineString
 
 import fiona
 
+import pandas as bb
 
 import itertools
 
@@ -218,14 +219,16 @@ def kernel (array, kernel_size, row_centre, col_centre):
 
     if (-1)**kernel_size < 0:
         row_to_0 = row_centre
-        row_to_End = len(array[:,0])-row_centre
+        row_to_End = array.shape[0]-row_centre
         col_to_0 = col_centre
-        col_to_End = len(array)-col_centre
+        col_to_End = array.shape[1]-col_centre
 
-        Lim_top = row_centre - min(np.floor(kernel_size/2), row_to_0)
-        Lim_bottom = row_centre + min(np.floor(kernel_size/2)+1, row_to_End)
-        Lim_left = col_centre - min(np.floor(kernel_size/2), col_to_0)
-        Lim_right = col_centre + min(np.floor(kernel_size/2)+1, col_to_End)
+        width = np.floor(kernel_size/2)
+
+        Lim_top = row_centre - min(width, row_to_0)
+        Lim_bottom = row_centre + min(width+1, row_to_End)
+        Lim_left = col_centre - min(width, col_to_0)
+        Lim_right = col_centre + min(width+1, col_to_End)
 
         kernel = array [int(Lim_top):int(Lim_bottom), int(Lim_left):int(Lim_right)]
         kernel_row = np.arange(int(Lim_top),int(Lim_bottom))
@@ -295,7 +298,7 @@ def porthole (array, radius, row_centre, col_centre):
 
 ##########################################################################################################
 ##########################################################################################################
-def Surface_outline (Outline_array, Surface_array, Outline_value):
+def Surface_outline (Outline_array, Surface_array, Outline_value, Nodata_value):
     """
     This function calculates the inner outline of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
     Args:
@@ -312,31 +315,81 @@ def Surface_outline (Outline_array, Surface_array, Outline_value):
 
     Surface_array[Surface_array > 0. ] = 1
     Inside = np.where(Surface_array == 1)
-    for i in range(len(Inside[0])):
+
+    for i in range(len(Inside[1])):
         x = Inside[0][i]; y = Inside[1][i]
         K, Kx, Ky = kernel (Surface_array, 3, x, y)
+
         if np.count_nonzero(K) <=  K.size-1 :
             Outline_array[x, y] = Outline_value
 
-    Twin = np.copy(Outline_array)
-    Outline = np.where (Twin > 0)
-
-    for i in range(len(Outline[0])):
+    """for i in range(len(Outline[0])):
         x = Outline[0][i]; y = Outline[1][i]
         K_r, Kx_r, Ky_r = kernel (Surface_array, 3, x, y)
         K, Kx, Ky = kernel (Twin, 3, x, y)
         if np.sum(K_r) == 0:
-            Outline_array[x, y] = 0
+            Outline_array[x, y] = 0"""
 
     return Outline_array, Outline_value
 
 
 ##########################################################################################################
 ##########################################################################################################
-def Tightrope_outline (Outline_array, Surface_array, Outline_value):
-    """
+def stitch_segments (segments, M_code):
+    """This function stitches tiny segments into something that makes sense"""
 
-    CURRENTLY USELESS
+    segments[np.isnan(segments)] = 0
+
+    M_outlines = cl.Polyline()
+
+    L_code = 1
+    while np.amax(segments) != 0:
+        # Setup the pandas outline
+        M_outline = cl.Line()
+
+        nonzero_x = np.where(segments[:,0]!=0)[0][0]
+        nonzero_y = np.where(segments[:,1]!=0)[0][0]
+
+        # choose a random point to be the first point in the points that are not zero
+        M_outline.set_first_point(M_code, L_code, segments[nonzero_y,1], segments[nonzero_x,0], 1)
+        M_outline = M_outline.add_element(1,M_code, L_code, segments[nonzero_y+1,1], segments[nonzero_x+1,0])
+
+        # Now stitch in a loop
+        for d in [-1,0]:
+            for i in range(3,len(segments),3):
+                #print i
+                last_point = M_outline['rowcol'].iloc[d]
+                find_next = np.where(np.logical_and(segments[:,1] == last_point.row(), segments[:,0] == last_point.col()))[0]
+                #print find_next
+                #print segments[find_next]
+
+                for j in range(len(find_next)):
+                    if find_next[j]/3. == find_next[j]//3:
+                        M_outline = M_outline.add_element(-d*len(M_outline['rowcol']),M_code, L_code, segments[find_next[j]+1,1], segments[find_next[j]+1,0])
+                        segments[find_next[j]:find_next[j]+3,:] = 0
+                    elif (find_next[j]-1)/3. == (find_next[j]-1)//3:
+                        M_outline = M_outline.add_element(-d*len(M_outline['rowcol']),M_code, L_code, segments[find_next[j]-1,1], segments[find_next[j]-1,0])
+                        segments[find_next[j]-1:find_next[j]+2,:] = 0
+
+        #Recalculate the distances to make it nicer. Optional
+        #M_outline = M_outline.recalc_length(1)
+
+        M_outlines.append(M_outline)
+        L_code+=1
+
+    Final_outlines = M_outlines[0]
+
+    for i in range(1,len(M_outlines)):
+        Final_outlines = bb.concat([Final_outlines,M_outlines[i]])
+
+
+    return Final_outlines
+
+
+##########################################################################################################
+##########################################################################################################
+def Pandas_outline (Surface_array, M_code, scale):
+    """
 
     This function calculates the shortest outline of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
     Args:
@@ -351,35 +404,57 @@ def Tightrope_outline (Outline_array, Surface_array, Outline_value):
     Author: GCHG
     """
 
-    Surface_array[Surface_array > 0. ] = 1
-    Inside = np.where(Surface_array == 1)
-    for i in range(len(Inside[0])):
-        x = Inside[0][i]; y = Inside[1][i]
-        K, Kx, Ky = kernel (Surface_array, 3, x, y)
-        if np.count_nonzero(K) <=  K.size-1 :
-            Outline_array[x, y] = Outline_value
+    #https://stackoverflow.com/questions/24539296/outline-a-region-in-a-graph
+    image = Surface_array
+    maskimg = np.zeros(Surface_array.shape, dtype='int')
+    maskimg[image == M_code] = 3
 
-    Twin = np.copy(Outline_array)
-    Outline = np.where (Twin > 0)
+    x0 = 0; x1 = Surface_array.shape[1]
+    y0 = 0; y1 = Surface_array.shape[0]
 
-    for i in range(len(Outline[0])):
-        x = Outline[0][i]; y = Outline[1][i]
-        K_r, Kx_r, Ky_r = kernel (Surface_array, 3, x, y)
-        K, Kx, Ky = kernel (Twin, 3, x, y)
-        if np.sum(K_r) == 0:
-            Outline_array[x, y] = 0
+    # our image with the numbers 1-3 is in array maskimg
+    # create a boolean image map which has trues only where maskimg[x,y] == 3
+    mapimg = (maskimg == 3)
 
-    Twin = np.copy(Outline_array)
-    Outline = np.where (Twin > 0)
+    # a vertical line segment is needed, when the pixels next to each other horizontally
+    #   belong to diffferent groups (one is part of the mask, the other isn't)
+    # after this ver_seg has two arrays, one for row coordinates, the other for column coordinates
+    ver_seg = np.where(mapimg[:,1:] != mapimg[:,:-1])
+    # the same is repeated for horizontal segments
+    hor_seg = np.where(mapimg[1:,:] != mapimg[:-1,:])
 
-    for i in range(len(Outline[0])):
-        x = Outline[0][i]; y = Outline[1][i]
-        K_r, Kx_r, Ky_r = kernel (Surface_array, 3, x, y)
-        K, Kx, Ky = kernel (Twin, 3, x, y)
-        if np.sum(K_r) > Outline_value * 3:
-            Outline_array[x, y] = 0
+    # if we have a horizontal segment at 7,2, it means that it must be drawn between pixels
+    #   (2,7) and (2,8), i.e. from (2,8)..(3,8)
+    # in order to draw a discountinuous line, we add Nones in between segments
+    l = []
+    for p in zip(*hor_seg):
+        l.append((p[1], p[0]+1))
+        l.append((p[1]+1, p[0]+1))
+        l.append((np.nan,np.nan))
 
-    return Outline_array, Outline_value
+    # and the same for vertical segments
+    for p in zip(*ver_seg):
+        l.append((p[1]+1, p[0]))
+        l.append((p[1]+1, p[0]+1))
+        l.append((np.nan, np.nan))
+
+    # now we transform the list into a numpy array of Nx2 shape
+    segments = np.array(l)
+    # now we need to know something about the image which is shown
+    #   at this point let's assume it has extents (x0, y0)..(x1,y1) on the axis
+    #   drawn with origin='lower'
+    # with this information we can rescale our points
+    segments[:,0] = (x0 + (x1-x0) * segments[:,0] / mapimg.shape[1]) - scale/2.
+    segments[:,1] = (y0 + (y1-y0) * segments[:,1] / mapimg.shape[0]) - scale/2.
+
+
+    #This is me now ^^
+    M_outline = stitch_segments(segments,M_code)
+
+    return M_outline
+
+
+
 
 
 
@@ -600,7 +675,12 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, This_polyl
             sK_lab, sKr_lab, sKc_lab = kernel (Labels_array, kernel_size, Startpoint_row, Startpoint_col)
             sK_len, sKr_len, sKc_len = kernel (Length_array, kernel_size, Startpoint_row, Startpoint_col)
             sK_cod, sKr_cod, sKc_cod = kernel (Code_array, kernel_size, Startpoint_row, Startpoint_col)
-
+            #Also find its end point
+            Endpoint_row = This_line.end_point()[0]; Endpoint_col = This_line.end_point()[1]
+            # Make kernels around the end point
+            eK_lab, eKr_lab, eKc_lab = kernel (Labels_array, kernel_size, Endpoint_row, Endpoint_col)
+            eK_len, eKr_len, eKc_len = kernel (Length_array, kernel_size, Endpoint_row, Endpoint_col)
+            eK_cod, eKr_cod, eKc_cod = kernel (Code_array, kernel_size, Endpoint_row, Endpoint_col)
             # Also retrieve the line's code
             This_line_code = Code_array[Startpoint_row, Startpoint_col]
             This_line_code_index = This_line_code - 1
@@ -641,7 +721,10 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, This_polyl
                     # Reverse the second line (arbitrary)
                     This_polyline[Second_line_index][:Second_Counter] = reversed(This_polyline[Second_line_index][:Second_Counter])
 
-                    #Make sure it's not one of those short lines
+
+                    # What if we could stop there and let the second function do the job?
+
+                    """#Make sure it's not one of those short lines
                     if len(This_polyline[Second_line_index][:Second_Counter]) > 1:
                         # Add the extra distance values to the first line
                         This_polyline[First_line_index][-2] = (np.asarray(This_polyline[First_line_index][-2]) + This_polyline[Second_line_index][-2][-1] + Distance).tolist()
@@ -658,9 +741,9 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, This_polyl
 
                         Length_array[Line_row, Line_col] = This_polyline[Second_line_index][-2]
                         Code_array[Line_row, Line_col] = First_line_code
-                        Indices_to_clean.append(First_line_index)
+                        Indices_to_clean.append(First_line_index)"""
 
-    #Now rid of the lines that have become redundant
+    """#Now rid of the lines that have become redundant
     for i in reversed(Indices_to_clean):
         del This_polyline[i]
 
@@ -672,7 +755,7 @@ def Stitch_diverging_starts (Length_array, Labels_array, Label_value, This_polyl
             Line_row.append(This_polyline[i][j][0])
             Line_col.append(This_polyline[i][j][1])
 
-        Code_array[Line_row, Line_col] = i+1
+        Code_array[Line_row, Line_col] = i+1"""
 
 
     return This_polyline, Length_array, Code_array
@@ -1001,6 +1084,8 @@ def Select_few_longest (Polylines):
         # Store the result in the new big polylines list
         new_Polylines.append(This_new_polyline)
 
+
+
     return new_Polylines
 
 
@@ -1028,8 +1113,10 @@ def Line_to_shp (line, Envidata, Enviarray, save_dir, file_name):
     Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
 
     Coordinates = []
-    for i in range(len(line[:-2])):
-        coord_pair = (X_cell_width*line[i][1]+X_origin, Y_cell_width*line[i][0]+Y_origin)
+    for i in range(len(line['rowcol'])):
+        x = line['rowcol'].iloc[i].col()
+        y = line['rowcol'].iloc[i].row()
+        coord_pair = (X_cell_width * x + X_origin, Y_cell_width * y + Y_origin)
         Coordinates.append(coord_pair)
     # Here's an example Shapely geometry
     poly = LineString(Coordinates)
@@ -1052,6 +1139,8 @@ def Line_to_shp (line, Envidata, Enviarray, save_dir, file_name):
     feat = geom = None  # destroy these
     # Save and close everything
     ds = layer = feat = geom = None
+
+    print "file saved:" '%s/%s.shp' % (save_dir,file_name)
 
 ##########################################################################################################
 ##########################################################################################################

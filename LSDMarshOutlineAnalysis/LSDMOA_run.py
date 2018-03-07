@@ -36,6 +36,7 @@ from LSDMOA_functions import Line_to_shp
 #from LSDMOA_functions import Shp_to_lines
 from random import randint
 
+import pandas as bb
 
 
 
@@ -72,22 +73,116 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
     ######
     #TEST ZONE STARTS
     ######
+    """import pandas as bb
+
+    #A = Point(1,2)
+    A = Point(1,2)
+    print A
+    print A.row()
+    print
+
+    B = Transect()
+
+    print B
+    print type(B)
+    print
+
+    B.set_first_point(1, 1, 0, 3, 1)
+
+    print B
+    print type(B), B['L_code'].size
+
+    B = B.add_element(1,1,1,4,3,1)
+
+    print B
+    print type(B)
 
 
-    """arr = np.asarray([[1,2,3],[4,5,6],[7,8,9]])
-    print arr
+    C = B.subdivide(4)
 
-    tup = [(0,0),(1,2), [0,0], 5.0]
+    print C
+    print
 
-    print tup
-    print tup[:-2]
-    print arr[tup[:-2]]
 
-    arr[tup[:-2]] = tup[-2]
+    arr = np.asarray([[0,1,2,3,4],
+           [0,1,2,3,4],
+           [0,1,2,4,4],
+           [0,1,2,5,16],
+           [0,1,2,7,12],])
 
-    print arr
+    arr2 = np.asarray([[0,1,1,1,0],
+       [0,1,2,0,4],
+       [0,1,2,1,4],
+       [0,1,2,1,16],
+       [0,1,2,1,12],])
 
-    quit()"""
+
+
+
+    C = C.extract_values_from_basemap(arr,'Z', -1)
+    C = C.extract_values_from_basemap(arr2,'Marsh', -1)
+
+    C = C.orient_seaward()
+    C = C.select_transect()
+
+    print C
+    print
+
+    C = C.remove_element(2)
+
+    print C
+    print
+
+
+
+    print '#############################'
+    print
+
+
+    from random import randint
+
+    Marsh = Marsh_platform(50,60)
+    Marsh[:] = 1
+    DEM = Marsh_platform(50,60)
+    for i in range(len(DEM)):
+        for j in range(len(DEM[0])):
+            DEM[i,j] = DEM[i,j] * randint(1,5)
+
+    # Modify the marsh
+    Marsh[0:30,:] = 0
+    Marsh[0:20,0:15] = 1
+    Marsh[30:,20] = 0
+    Marsh[4:26,25:48] = 1
+    Marsh[12:14,30:48] = 0
+    Marsh[38:40,40:45] = 0
+    Marsh[31, 6:10] = 0
+    Marsh[8, 14:15] = 0
+    Marsh[7:9, 13] = 0
+    Marsh[6:11, 5:13] = 0
+    Marsh[30:32, 19] = 0
+    Marsh[30, 18:20] = 0
+    Marsh[3:5, 47:49] = 1
+    Marsh[25:27, 26] = 1
+    Marsh[28, 29:35] = 1
+    Marsh[29, 29] = 1
+    Marsh[29, 35] = 1
+    Marsh[18, 5:9] = 0
+    Marsh[20:27, 41] = 0
+    Marsh[2:7, 25:30] = 1
+    Marsh[30:35, 0] = 0
+    Marsh[30:35, 53] = 0
+    Marsh[36:39, 53] = 0
+    Marsh[49,20:60] = 0
+    Marsh[:,-1] = 0
+
+    Marsh = Marsh.label_connected (Nodata_value)
+
+    Marsh.plot_map(Output_dir+'Figures/', '000_Test_marsh', 'Sous-fifre', Nodata_value)
+
+    Outlines = Marsh.extract_outlines()
+
+    Outlines.plot_on_basemap(Marsh, Output_dir+'Figures/', '001_Test_lines', Nodata_value)"""
+
 
     ######
     #TEST ZONE ENDS
@@ -128,24 +223,17 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         print Marsh.shape
 
 
-        #DEM = DEM [850:1050,230:430]
-        #Marsh = Marsh [850:1050,230:430]
+        #DEM = DEM [700:1000,:]
+        #Marsh = Marsh [700:1000,:]
 
-        #DEM = DEM [700:1300,100:600]
-        #Marsh = Marsh [700:1300,100:600]
-
-
+        DEM = DEM [700:1600,100:700]
+        Marsh = Marsh [700:1600,100:700]
 
 
-
-
-
-
-
-        """Marsh = np.ones((50,50), dtype = np.float)
+        """Marsh = np.ones((50,60), dtype = np.float)
         from random import randint
 
-        DEM = np.ones((50,50), dtype = np.float)
+        DEM = np.ones((50,60), dtype = np.float)
         for i in range(len(DEM)):
             for j in range(len(DEM[0])):
                 DEM[i,j] = DEM[i,j] * randint(1,5)
@@ -184,11 +272,18 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Marsh_DEM = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = False)
         Marsh_labels = Marsh_object.label_connected (Nodata_value)
 
+        Marsh_labels.plot_map(Output_dir+'Figures/', '000_Test_marsh', 'Sous-fifre', Nodata_value)
+
+        Outlines = Marsh_labels.extract_outlines()
+
+        Outlines.plot_on_basemap(Marsh_labels, Output_dir+'Figures/', '001_Test_lines', Nodata_value)
+
+        quit()
 
         #Make a proper object for the outline
         Outline_object = 0*Marsh_outline(Marsh.shape[0], Marsh.shape[1])
-        Outline_object, Outline_value = Outline_object.complete_outline_from_array (Marsh_object)
-        #Tightrope_object, Tightrope_value = Outline_object.tightrope_outline_from_array (Marsh_object)
+        Outline_object, Outline_value = Outline_object.complete_outline_from_array (Marsh_object, Nodata_value)
+
         Outline_labels = Outline_object.label_connected (Nodata_value)
 
         #Now get rid of some useless lines
@@ -203,42 +298,40 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         # Now select the longest lines
         Shortlist_polylines = Polylines.select_few_longest ()
 
-        # Show results of a circular kernel
-        #Outlines, Outlines_row, Outlines_col = Outline_labels.vectorise(Nodata_value)
-        #Outline_buffer = Outline_object.swath (Outline_value, Nodata_value)
 
         # Plot the things
-        #Marsh_object.plot_map(Output_dir+'Figures/', '00_Marsh_object', 'Sous-fifre', Nodata_value)
-        #Marsh_DEM.plot_map(Output_dir+'Figures/', '01_Marsh_DEM', 'Sous-fifre', Nodata_value)
-        #Marsh_labels.plot_map(Output_dir+'Figures/', '02_Marsh_Labels', 'Sous-fifre', Nodata_value)
-        #Outline_object.plot_map(Output_dir+'Figures/', '03_Outline_object', 'Sous-fifre', Nodata_value)
-        #Outline_labels.plot_map(Output_dir+'Figures/', '04_Outline_labels', 'Sous-fifre', Nodata_value)
-        #Outline_simple.plot_map(Output_dir+'Figures/', '05_Outline_simple', 'Sous-fifre', Nodata_value)
-        #Outline_trimmed.plot_map(Output_dir+'Figures/', '06_Outline_trimmed', 'Sous-fifre', Nodata_value)
-        #Outline_length.plot_map(Output_dir+'Figures/', '07_Outline_length', 'Sous-fifre', Nodata_value)
+        Marsh_object.plot_map(Output_dir+'Figures/', '00_Marsh_object', 'Sous-fifre', Nodata_value)
+        Marsh_DEM.plot_map(Output_dir+'Figures/', '01_Marsh_DEM', 'Sous-fifre', Nodata_value)
+        Marsh_labels.plot_map(Output_dir+'Figures/', '02_Marsh_Labels', 'Sous-fifre', Nodata_value)
+        Outline_object.plot_map(Output_dir+'Figures/', '03_Outline_object', 'Sous-fifre', Nodata_value)
+        Outline_labels.plot_map(Output_dir+'Figures/', '04_Outline_labels', 'Sous-fifre', Nodata_value)
+        Outline_simple.plot_map(Output_dir+'Figures/', '05_Outline_simple', 'Sous-fifre', Nodata_value)
+        Outline_trimmed.plot_map(Output_dir+'Figures/', '06_Outline_trimmed', 'Sous-fifre', Nodata_value)
+        Outline_length.plot_map(Output_dir+'Figures/', '07_Outline_length', 'Sous-fifre', Nodata_value)
+
         #plot_lines_on_basemap(Lines_row, Lines_col, Lines_dist, Lines_code, Outline_length, Output_dir+'Figures/', '08_Lines_DivAll', Nodata_value)
         #plot_lines_on_basemap(nLines_row, nLines_col, nLines_dist, nLines_code, Outline_length, Output_dir+'Figures/', '09_Lines_DivAll_simple', Nodata_value)
 
 
         # STEP 2: make those transects
 
-        print Output_dir
-        quit()
-
         All_transects = Shortlist_polylines.transects(10,20, envidata_DEM, DEM, Output_dir, site)
+        #All_transects = Shortlist_polylines.transects(10,20, envidata_DEM, DEM, Output_dir, site)
 
-        #Shortlist_polylines.plot_on_basemap(Outline_length, Output_dir+'Figures/', '10_LINETEST', Nodata_value)
-        #All_transects.plot_on_basemap(Outline_length, Output_dir+'Figures/', '11_LINETEST', Nodata_value)
+        Shortlist_polylines.plot_on_basemap(Outline_length, Output_dir+'Figures/', '10_LINETEST', Nodata_value)
+        All_transects.plot_on_basemap(Outline_length, Output_dir+'Figures/', '11_LINETEST', Nodata_value)
 
 
         # STEP 3: extract the data from the transects
         All_transects = All_transects.transect_properties(20,Marsh_object)
-        All_transects = All_transects.select_transects_from_property (1)
         All_transects = All_transects.transect_properties(1,DEM)
+
+        All_transects = All_transects.select_transects_from_property (3)
+
+        All_transects.plot_property(Output_dir+'Figures/', '16_PLOTTEST',-2)
 
         All_transects = All_transects.transect_stats(20)
 
-        All_transects.plot_property(Output_dir+'Figures/', '16_PLOTTEST',-2)
         All_transects.plot_property_stats(Output_dir+'Figures/', '17_PLOTTEST',-2)
 
 

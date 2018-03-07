@@ -25,6 +25,8 @@ import LSDMOA_functions as fct
 
 import copy
 
+import pandas as bb
+
 ##########################################################################################################
 ##########################################################################################################
 class Land_surface (np.ndarray):
@@ -41,35 +43,48 @@ class Land_surface (np.ndarray):
 
     def set_attribute (self, select_array, select_value, attribute_array, Nodata_value, classification = False):
         new_array = self.copy()
-
         Select = np.where (select_array >= select_value)
         Discard = np.where (np.logical_and(select_array < select_value, select_array != Nodata_value))
         Nodata = np.where (attribute_array == Nodata_value)
-
         new_array[Discard] = 0
         new_array[Nodata] = Nodata_value
-
         if classification == False:
             new_array[Select] = attribute_array [Select]
         else:
             new_array[Select] = select_value
-
         return new_array
 
 
     def label_connected (self, Nodata_value):
         new_array = self.copy()
         Ref = self.copy()
-
         import scipy.ndimage as scim
         array, numfeat = scim.label(self)
-
         for value in np.arange(1, np.amax(array)+1, 1):
             line = np.where(array == value)
             new_array[line] = value
             new_array[Ref == Nodata_value] = Nodata_value
-
         return new_array
+
+
+
+    def extract_outlines (self):
+        print 'extracting outlines'
+        M_labels = range (int(np.amin(self[self>0])), int(np.amax(self[self>0]))+1, 1)
+        Outlines = Polyline()
+        for M in M_labels:
+            print '.... Label ', M
+            M_outlines = fct.Pandas_outline(self,M,1)
+            Outlines.append(M_outlines)
+
+        return Outlines
+
+
+
+
+
+
+
 
 
     def plot_map (self, save_dir, figname, title, Nodata_value):
@@ -131,11 +146,13 @@ class Marsh_outline (Land_surface):
         self[np.isnan(self)] = 0
         self = 0 * self
 
-    def complete_outline_from_array (self, array):
+    def complete_outline_from_array (self, array, Nodata_value):
         print '\nExtracting outline...'
         Start = timeit.default_timer()
         new_array = self.copy()
-        new_array, Outline_value = fct.Surface_outline (new_array, array, 2)
+
+        new_array, Outline_value = fct.Surface_outline (new_array, array, 2, Nodata_value)
+
         Stop = timeit.default_timer()
         print '  Extraction runtime : ', Stop - Start , 's'
 
@@ -231,7 +248,7 @@ class Marsh_outline (Land_surface):
             This_polyline, Length_array, Code_array = fct.Stitch_diverging_starts (Length_array, Labels_array, Labels[lab], This_polyline, Code_array, Scale)
             print
             #Stitch outward going branches
-            This_polyline, Length_array = fct.Graft_diverging_branch (Length_array, Labels_array, Labels[lab], This_polyline, Code_array, Scale)
+            #This_polyline, Length_array = fct.Graft_diverging_branch (Length_array, Labels_array, Labels[lab], This_polyline, Code_array, Scale)
             print
 
             #Stitch inward going branches, but not yet.
@@ -245,16 +262,13 @@ class Marsh_outline (Land_surface):
 
         return Length_array, Polylines
 
-
-
-
 ##########################################################################################################
 ##########################################################################################################
 class Point (tuple):
-    """With this class we make a point that has row and column properties and that can also hold other properties"""
+    """With this class we make a point that has row and column attributes."""
 
-    def __new__(self, row, col):
-       return tuple.__new__(Point, (row, col))
+    def __new__(self, x, y):
+        return tuple.__new__(Point, (x, y))
 
     def row (self):
         row = self[0]
@@ -264,68 +278,105 @@ class Point (tuple):
         col = self[1]
         return col
 
+    def Dist_to_point (self, other):
+        return np.sqrt((self.row()-other.row())**2 + (self.col()-other.col())**2)
+
+
 ##########################################################################################################
 ##########################################################################################################
-class Line (list):
-    def __init__(self):
-        list.__init__(self)
-
-    def start_point (self):
-        return self[0]
-
-    def end_point (self):
-        if len(self)>1:
-            for i in range(1,len(self)):
-                if type(self[-i]) is Point:
-                    A = self[-i]
-                    break
-        else:
-            A = self[0]
-        return A
-
-
-    def add_attribute_list (self, attribute_list):
-        if len(self[start_point:end_point]) == len(attribute_list):
-            self.append(attribute_list)
-        return self
-
-
-    def save_to_shp (self, Envidata, Enviarray, save_dir, file_name):
-        fct.Line_to_shp(self, Envidata, Enviarray, save_dir, file_name)
-
-
-    def prepare_for_plotting(self,colour):
-        Line_row = []; Line_col = []
-        for i in range(self.index(self.start_point()), self.index(self.end_point())+1):
-            Line_row.append(self[i][0]); Line_col.append(self[i][1])
-        Line = Line2D(Line_col, Line_row, color = plt.cm.gist_earth(50*colour), alpha = 0.5)
-
+class Line (bb.DataFrame):
+    """The Line class is a Pandas DataFrame.
+    It is super important"""
+    @property
+    def _constructor(self):
         return Line
 
 
+    def set_first_point(self, M_code, L_code, row, col, scale = 1):
+        """You must always initiate a line with a first point"""
+        self['M_code'] = [M_code]
+        self['L_code'] = [L_code]
+        self['rowcol'] = [Point(row,col)]
+        self['length'] = [0.001*scale]
 
-    def select_line (self, condition):
 
-        if condition == 1:
-            halfway = int(len(self[-1])/2)
-            # If the marsh bit is at the beginning
-            if np.count_nonzero(self[-1][0:halfway]) >= 0.9 * len(self[-1][0:halfway]):
-                # If there are no other marsh bits after
-                if np.count_nonzero(self[-1][halfway:]) < 0.2 * len(self[-1][halfway:]):
-                    self.append(True)
-                else:
-                    self.append(False)
-            # The same in reverse
-            elif np.count_nonzero(self[-1][halfway:]) >= 0.9 * len(self[-1][halfway:]):
-                # If there are no other marsh bits after
-                if np.count_nonzero(self[-1][0:halfway]) < 0.2 * len(self[-1][0:halfway]):
-                    self.append(True)
-                else:
-                    self.append(False)
-            else:
-                self.append(False)
-
+    def add_element (self, position, M_code, L_code, row, col, scale = 1):
+        """position must be positive"""
+        length = scale * Point(row,col).Dist_to_point(self['rowcol'].iloc[position-1]) + self['length'].iloc[position-1]
+        element = bb.DataFrame({'M_code': [M_code],'L_code': [L_code], 'rowcol':[Point(row,col)], 'length':[length]})
+        top = self[0:position]; bottom = self[position:]
+        self=bb.concat((top,element,bottom))
+        self = self.reset_index(drop=True)
         return self
+
+    def remove_element (self,position):
+        self = self.drop(self.index[position])
+        self = self.reset_index(drop=True)
+        return self
+
+
+    def start_point (self):
+        return self['rowcol'].iloc[0]
+
+
+    def end_point (self):
+        return self['rowcol'].iloc[-1]
+
+
+    def add_attribute_list (self, attr_name, attr_list):
+        """Only use after there are no more points to add"""
+        if type(attr_list) is bool:
+            self[str(attr_name)] = bb.Series(attr_list, index=self.index)
+        elif len(attr_list) == len(self['rowcol']):
+            self[str(attr_name)] = bb.Series(attr_list, index=self.index)
+        return self
+
+
+    def remove_attribute (self, attr_name):
+        """Same here, do not use if you are still modifying the line geometry"""
+        self.drop(columns=[str(attr_name)])
+
+
+    def switch_position (self, old_position,new_position):
+        return A
+
+
+    def save_line_to_shp (self, Envidata, Enviarray, save_dir, file_name):
+        print "Saving file:", file_name
+        fct.Line_to_shp(self, Envidata, Enviarray, save_dir, file_name)
+
+
+    def prepare_for_plotting(self,colour,transparence = 0.5):
+        Line_row = []; Line_col = []
+        for i in range(len(self['rowcol'])):
+            Line_row.append(self['rowcol'].iloc[i].row()); Line_col.append(self['rowcol'].iloc[i].col())
+        Line = Line2D(Line_col, Line_row, color = plt.cm.gist_earth(50*colour), alpha = transparence)
+        return Line
+
+
+    def extract_values_from_basemap (self, basemap, attr_name, Nodata_value):
+        prop_list = []
+        for i in range(len(self['rowcol'])):
+            point = self['rowcol'].iloc[i]
+            if int(point.row()) < basemap.shape[0] and int(point.col()) < basemap.shape[1]:
+                value = basemap[int(point.row()), int(point.col())]
+            else:
+                value = Nodata_value
+            prop_list.append(value)
+        self.add_attribute_list(attr_name,prop_list)
+        return self
+
+
+    def recalc_length (self,scale):
+        self['length'].iloc[0] = 0.001 * scale
+        for i in range(1,len(self['length'])):
+            self['length'].iloc[i] = self['rowcol'].iloc[i].Dist_to_point(self['rowcol'].iloc[i-1])+ self['length'].iloc[i-1]
+        return self
+
+
+
+
+
 
 
 
@@ -338,37 +389,55 @@ class Line (list):
 
 
 
-    def extract_values (self, basemap):
-        prop_list = []
-        for i in range(self.index(self.start_point()), self.index(self.end_point())+1):
 
-            if int(self[i][0]) < basemap.shape[0] and int(self[i][1]) < basemap.shape[1]:
-                value = basemap[int(self[i][0]),int(self[i][1])]
-            else:
-                value = 0
-            prop_list.append(value)
 
-        if type(self[-1]) is Point:
-            self.append(prop_list)
-        elif type(self[-1]) is bool:
-            self.insert(-1, prop_list)
 
-        return self
+
+##########################################################################################################
+##########################################################################################################
+class Transect (Line):
+    """The Transect class is a Pandas DataFrame.
+    It is also super important"""
+    @property
+    def _constructor(self):
+        return Transect
 
 
     def subdivide (self,sub_number):
-        #Only works if the initial line only has two points.
-        if self.index(self.end_point()) <2:
-            sub_row = []; sub_col = []
+        """Only works if the initial line only has two points."""
+        if len(self['rowcol']) == 2:
+            sub_row = []; sub_col = []; sub_dist = []
             for sub in range(1,sub_number):
-                sub_row.append(self[0][0]+sub*float(self[1][0]-self[0][0])/sub_number)
-                sub_col.append(self[0][1]+sub*float(self[1][1]-self[0][1])/sub_number)
-
+                point_1 = self['rowcol'].iloc[0]; point_2 = self['rowcol'].iloc[-1]
+                sub_row.append(point_1.row() + sub * float(point_2.row()-point_1.row())/sub_number)
+                sub_col.append(point_1.col() + sub * float(point_2.col()-point_1.col())/sub_number)
+                sub_dist.append(sub * point_1.Dist_to_point(point_2)/sub_number)
             for sub in range(0,sub_number-1):
-                subpoint = Point(sub_row[sub], sub_col[sub])
-                self.insert(-1,subpoint)
-
+                position = len(self['rowcol'])-1
+                self = self.add_element (position, self['M_code'].iloc[0], self['L_code'].iloc[0], sub_row[sub], sub_col[sub])
         return self
+
+
+    def orient_seaward (self):
+        """Only use if you aready have a Z attribute"""
+        if self['Z'].iloc[0] < self['Z'].iloc[-1]:
+            self = self.sort_index(ascending = False)
+            self = self.reset_index(drop = True)
+        return self
+
+
+    def select_transect (self):
+        """Only use if you aready have a Marsh attribute"""
+        Zeros = np.where(np.asarray(self['Marsh']) < 0.5)
+        Ones = np.where(np.asarray(self['Marsh']) > 0.5)
+        if len(Zeros[0]) == 0 or len(Ones[0]) == 0:
+            self.add_attribute_list ('select', False)
+        elif min(Zeros[0])<max(Ones[0]):
+            self.add_attribute_list ('select', False)
+        else:
+            self.add_attribute_list ('select', True)
+        return self
+
 
 
 ##########################################################################################################
@@ -402,8 +471,10 @@ class Polyline (list):
         for label in range(len(self)):
             if len(self[label]) > 0:
                 for code in range(len(self[label])):
-                    if type(self[label]) is Line:
-                        self[label].save_to_shp (self, Envidata, Enviarray, save_dir, site_name+"_"+str(label)+"_"+str(code))
+                    print type(self[label][code])
+                    if type(self[label][code]) is Line:
+                        self[label][code].save_line_to_shp (Envidata, Enviarray, save_dir+'Shapefiles/', site_name+"_"+str(label)+"_"+str(code))
+
 
 
 
@@ -450,19 +521,20 @@ class Polyline (list):
 
 
 
-
     def select_transects_from_property (self, condition):
         Structure_list = self.structure()
 
         if len(Structure_list) == 4 and Structure_list[-1] is Point:
             for i in range(len(self)):
                 for j in range(len(self[i])):
+                    self[i][j].orient_seaward()
                     self[i][j].select_line(condition)
 
         elif len(Structure_list) == 5 and Structure_list[-1] is Point:
             for h in range(len(self)):
                     for i in range(len(self[h])):
                         for j in range(len(self[h][i])):
+                            self[h][i][j].orient_seaward()
                             self[h][i][j].select_line(condition)
 
         return self
@@ -494,7 +566,6 @@ class Polyline (list):
                         Polyline_mean = np.zeros(refinement+1, dtype = np.float)
                         Polyline_stdev = np.zeros(refinement+1, dtype = np.float)
 
-
                         if len(Polyline_values) > 1:
                             if len(Polyline_values[0]) > 1:
 
@@ -523,6 +594,7 @@ class Polyline (list):
 
 
     def plot_on_basemap(self,basemap, save_dir, figname, Nodata_value):
+        'Plotting on basemap'
         twin  = basemap.copy()
         #Make the canvas
         fig_height = min(np.floor(twin.shape[1])/5, 50); fig_width = min(np.floor(twin.shape[1])/5, 50)
@@ -540,28 +612,15 @@ class Polyline (list):
         scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
         cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
 
-        # Draw the lines.
-        Structure_list = self.structure()
-        print Structure_list
-
-        if len(Structure_list) == 4 and Structure_list[-1] is Point:
-            for i in range(len(self)):
-                for j in range(len(self[i])):
-                    Line1 = self[i][j]
-                    # This is what you plot
-                    #ax1.scatter(Line1[0][0], Line1[0][1], marker  = 'o', color = 'b')
-                    Line1 = Line1.prepare_for_plotting(5*j+1)
-                    ax1.add_line(Line1)
-
-        elif len(Structure_list) == 5 and Structure_list[-1] is Point:
-            for h in range(len(self)):
-                    for i in range(len(self[h])):
-                        for j in range(len(self[h][i])):
-                            Line1 = self[h][i][j]
-                            # This is what you plot
-                            #ax1.scatter(Line1[0][0], Line1[0][1], marker  = 'o', color = 'b')
-                            Line1 = Line1.prepare_for_plotting(5*j+1)
-                            ax1.add_line(Line1)
+        # Draw the lines, panda style
+        for i in range(len(self)):
+            Pandaline = self[i]
+            L_labels = range (1,max(Pandaline['L_code'])+1)
+            for j in L_labels:
+                Pandaline_slice = Pandaline.loc[Pandaline['L_code'] == j]
+                To_draw = Pandaline_slice.prepare_for_plotting(i,0.5)
+                ax1.add_line(To_draw)
+                ax1.scatter(Pandaline_slice['rowcol'].iloc[0].col(),Pandaline_slice['rowcol'].iloc[0].row())
 
         plt.savefig(save_dir+figname+'.png')
 
@@ -578,23 +637,26 @@ class Polyline (list):
         # Draw the lines.
         Structure_list = self.structure()
         print Structure_list
+        print len(Structure_list)
 
         if len(Structure_list) == 4 and Structure_list[-1] is Point:
             for i in range(len(self)):
                 for j in range(len(self[i])):
                     Line1 = self[i][j]
+                    #print Line1
                     if Line1[-1] == True:
                         # This is what you plot
-                        ax1.plot(Line1[draw], color = plt.cm.jet(i*20), alpha = 0.5+j/100)
+                        ax1.plot(Line1[draw])#, color = plt.cm.jet(i*20), alpha = 0.5+j/100)
 
         elif len(Structure_list) == 5 and Structure_list[-1] is Point:
             for h in range(len(self)):
                     for i in range(len(self[h])):
                         for j in range(len(self[h][i])):
                             Line1 = self[h][i][j]
+
                             if Line1[-1] == True:
                                 # This is what you plot
-                                ax1.plot(Line1[draw], color = plt.cm.jet(i*20), alpha = 0.5+j/100)
+                                ax1.plot(Line1[draw])#, color = plt.cm.jet(i*20), alpha = 0.5+j/100)
 
         plt.savefig(save_dir+figname+'.png')
 
@@ -615,13 +677,10 @@ class Polyline (list):
         elif len(Structure_list) == 5 and Structure_list[-1] is Point:
             for h in range(len(self)):
                     for i in range(len(self[h])):
-                        ax1.plot(self[h][i][-2], color = plt.cm.jet(i*20), alpha = 1)
+                        #print self[h][i][-2]
+                        #ax1.plot(self[h][i][-2])#, color = plt.cm.jet(i*20), alpha = 1)
                         if max( self[h][i][-2]) > 0:
-                            ax1.fill_between(range(0,21), self[h][i][-2]-self[h][i][-1], self[h][i][-2]+self[h][i][-1], color = plt.cm.jet(i*20), alpha = 0.3)
-
-                        print self[h][i][-2]
-                        print self[h][i][-1]
-                        print
+                            ax1.fill_between(range(0,21), self[h][i][-2]-self[h][i][-1], self[h][i][-2]+self[h][i][-1], alpha = 0.3)#, color = plt.cm.jet(i*20), alpha = 0.3)
 
         plt.savefig(save_dir+figname+'.png')
 

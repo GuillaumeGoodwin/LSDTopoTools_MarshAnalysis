@@ -309,6 +309,7 @@ class Line (bb.DataFrame):
         self = self.reset_index(drop=True)
         return self
 
+
     def remove_element (self,position):
         self = self.drop(self.index[position])
         self = self.reset_index(drop=True)
@@ -337,13 +338,18 @@ class Line (bb.DataFrame):
         self.drop(columns=[str(attr_name)])
 
 
-    def switch_position (self, old_position,new_position):
-        return A
-
-
     def save_line_to_shp (self, Envidata, Enviarray, save_dir, file_name):
-        print "Saving file:", file_name
         fct.Line_to_shp(self, Envidata, Enviarray, save_dir, file_name)
+
+
+    def Pandaline_to_shp (self, Envidata, Enviarray, save_dir, site_name):
+        value_range = [min(self['L_code']),max(self['L_code'])]
+        for L in value_range:
+            To_save = self.loc[self['L_code'] == L]
+            M_code = To_save['M_code'][0]
+            L_code = To_save['L_code'][0]
+            file_name = str(site_name)+'_'+str(M_code)+'_'+str(L_code)
+            fct.Line_to_shp(To_save, Envidata, Enviarray, save_dir, file_name)
 
 
     def prepare_for_plotting(self,colour,transparence = 0.5):
@@ -374,9 +380,25 @@ class Line (bb.DataFrame):
         return self
 
 
+    def Line_transects (self, spacing, length, Envidata, Enviarray, save_dir, site_name):
+        Transects = Transect()
+
+        value_range = [min(self['L_code']),max(self['L_code'])]
+        for L in value_range:
+            To_save = self.loc[self['L_code'] == L]
+            M_code = To_save['M_code'][0]
+            L_code = To_save['L_code'][0]
+            in_name = str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'.shp'
+            out_name = str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'_Tr.shp'
+
+            fct.Make_transects(save_dir+'Shapefiles/'+in_name, save_dir+'Shapefiles/'+out_name, spacing, length)
+
+            Trans = fct.Shp_to_transects (save_dir+"Shapefiles/", out_name, M_code, L_code, Envidata, Enviarray)
+
+            print Trans
 
 
-
+        return Transects
 
 
 
@@ -401,6 +423,16 @@ class Transect (Line):
     @property
     def _constructor(self):
         return Transect
+
+
+    def assign_transect_code (self):
+        Tr_codes = []
+        for i in range(len(self['rowcol'])//2):
+            Tr_codes.append(i+1); Tr_codes.append(i+1)
+
+
+        self = self.add_attribute_list('T_code',Tr_codes)
+        return self
 
 
     def subdivide (self,sub_number):
@@ -443,7 +475,7 @@ class Transect (Line):
 ##########################################################################################################
 ##########################################################################################################
 class Polyline (list):
-    """A polyline object can have line objects or polyline objects inside."""
+    """A polyline object has Line or Polyline objects inside. Let's say for now it just has Lines."""
     def __init__(self):
         list.__init__(self)
 
@@ -461,44 +493,45 @@ class Polyline (list):
         return Structure_list
 
 
-    def select_few_longest (self):
-        New_polyline = fct.Select_few_longest(self)
-        return New_polyline
-
-
     def save_to_shp (self, Envidata, Enviarray, save_dir, site_name):
-        #Structure_list = self.structure()
-        for label in range(len(self)):
-            if len(self[label]) > 0:
-                for code in range(len(self[label])):
-                    print type(self[label][code])
-                    if type(self[label][code]) is Line:
-                        self[label][code].save_line_to_shp (Envidata, Enviarray, save_dir+'Shapefiles/', site_name+"_"+str(label)+"_"+str(code))
+        for i in range(len(self)):
+            Outline = self[i]
+            Outline.Pandaline_to_shp(Envidata, Enviarray, save_dir, site_name)
 
 
+    def Polyline_transects (self, spacing, length, Envidata, Enviarray, save_dir, site_name, needs_saving = False):
+        #if you haven't done so yet, save your polyline to a .shp
+        if needs_saving is True:
+            self.save_to_shp (Envidata, Enviarray, save_dir, site_name)
 
-
-    def transects (self, spacing, length, Envidata, Enviarray, save_dir, site_name):
-        #first you must save the polylines as a shapefile shapefiles
-        self.save_to_shp (Envidata, Enviarray, save_dir, site_name)
-        #then use the outside function to make the tr
+        #Make a Polyline to store all those transects
         All_transects = Polyline()
-        # For each label
-        for label in range(len(self)):
-            print " \nThe label is:", label+1
-            Label_transects = Polyline()
-            if len(self[label]) > 0:
-                for code in range(len(self[label])):
-                    print "  Saving code number ", code+1
-                    fct.Save_transects(save_dir+'Shapefiles/'+'%s_%s_%s.shp' % (site_name,label, code),save_dir+'Shapefiles/'+'%s_%s_%s_Tr.shp' % (site_name,label, code), spacing, length)
-                    # STEP 4: Put the transect lines into our array reference system
-                    Code_transects = fct.Shp_to_lines (save_dir+"Shapefiles/", "%s_%s_%s_Tr" % (site_name,label, code), Envidata, Enviarray)
 
-                    Label_transects.append(Code_transects)
+        # For each Line in the Polyline
+        for i in range(len(self)):
+            self[i].Line_transects(spacing, length, Envidata, Enviarray, save_dir, site_name)
 
-            All_transects.append(Label_transects)
+        quit()
+
+
+        """print " \nThe label is:", label+1
+        Label_transects = Polyline()
+
+        if len(self[label]) > 0:
+            for code in range(len(self[label])):
+                print "  Saving code number ", code+1
+                fct.Save_transects(save_dir+'Shapefiles/'+'%s_%s_%s.shp' % (site_name,label, code),save_dir+'Shapefiles/'+'%s_%s_%s_Tr.shp' % (site_name,label, code), spacing, length)
+                # STEP 4: Put the transect lines into our array reference system
+                Code_transects = fct.Shp_to_lines (save_dir+"Shapefiles/", "%s_%s_%s_Tr" % (site_name,label, code), Envidata, Enviarray)
+
+                Label_transects.append(Code_transects)
+
+        All_transects.append(Label_transects)"""
 
         return All_transects
+
+
+
 
 
     def transect_properties (self, refinement, basemap):
@@ -686,7 +719,9 @@ class Polyline (list):
 
 
 
-
+    """def select_few_longest (self):
+        New_polyline = fct.Select_few_longest(self)
+        return New_polyline"""
 
 
 

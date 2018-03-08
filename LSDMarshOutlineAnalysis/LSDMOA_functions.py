@@ -8,27 +8,13 @@
 import os
 import sys
 import numpy as np
-import matplotlib.pyplot as plt
-#from osgeo import gdal, osr, gdalconst
-#import gdal
 
-#from osgeo.gdalconst import *
 import cPickle
 
 import gdal
 
 
-# This is a new functions file
 
-
-#----------------------------------------------------------------
-#1. Load useful Python packages
-
-import os
-import sys
-
-
-import numpy as np
 import functools
 import math as mt
 import cmath
@@ -41,9 +27,6 @@ from pylab import *
 import functools
 
 import itertools as itt
-#from osgeo import gdal, osr
-#from osgeo import gdal, gdalconst
-#from osgeo.gdalconst import *
 from copy import copy
 
 
@@ -70,15 +53,19 @@ import cPickle as pickle
 from osgeo import ogr
 from shapely.geometry import LineString
 
-
 import fiona
 
 import pandas as bb
 
-import itertools
+
+import numpy as np
+from fiona import collection
+from shapely.geometry import LineString, MultiLineString
+
 
 
 import LSDMOA_classes as cl
+
 
 ##########################################################################################################
 ##########################################################################################################
@@ -243,59 +230,6 @@ def kernel (array, kernel_size, row_centre, col_centre):
     return kernel, kernel_row, kernel_col
 
 
-
-##########################################################################################################
-##########################################################################################################
-def porthole (array, radius, row_centre, col_centre):
-    """
-    This function defines a circular kernel within an array (array), centred on (x_centre, y_centre). The is of a width of kernel_size.
-    Args:
-        array (2D numpy array): a 2-D array.
-        radius (float): the raidus of the circle defining the.
-        x_centre (int): The index of the element in the 1st dimension.
-        y_centre (int): The index of the element in the 2nd dimension.
-
-    Returns:
-        kernel (2D numpy array): The kernel of selected elements.
-        kernel_row (2D numpy array): The kernel of row indices of the selected elements.
-        kernel_col (2D numpy array): The kernel of column indices of the selected elements.
-
-    Author: GCHG
-    """
-
-    porthole_row = []; porthole_col = []; porthole_dist = []
-
-    row_to_0 = row_centre
-    row_to_End = len(array[:,0])-row_centre
-    col_to_0 = col_centre
-    col_to_End = len(array)-col_centre
-
-    Lim_top = row_centre - min(np.floor(radius), row_to_0)
-    Lim_bottom = row_centre + min(np.floor(radius)+1, row_to_End)
-    Lim_left = col_centre - min(np.floor(radius), col_to_0)
-    Lim_right = col_centre + min(np.floor(radius)+1, col_to_End)
-
-
-    kernel = array [int(Lim_top):int(Lim_bottom), int(Lim_left):int(Lim_right)]
-
-    for row in range(len(kernel)):
-        for col in range(len(kernel[0])):
-            ROW = row_centre - radius + row # coordinates in the array
-            COL = col_centre - radius + col # coordinates in the array
-            Distance = np.sqrt((row_centre-ROW)**2 + (col_centre-COL)**2)
-
-            if Distance < radius:
-                porthole_dist.append(Distance)
-                porthole_row.append(ROW)
-                porthole_col.append(COL)
-
-    return porthole_row, porthole_col, porthole_dist
-
-
-
-
-
-
 ##########################################################################################################
 ##########################################################################################################
 def Surface_outline (Outline_array, Surface_array, Outline_value, Nodata_value):
@@ -323,7 +257,8 @@ def Surface_outline (Outline_array, Surface_array, Outline_value, Nodata_value):
         if np.count_nonzero(K) <=  K.size-1 :
             Outline_array[x, y] = Outline_value
 
-    """for i in range(len(Outline[0])):
+    """ THIS PART IS CURRENTLY USELESS.
+    for i in range(len(Outline[0])):
         x = Outline[0][i]; y = Outline[1][i]
         K_r, Kx_r, Ky_r = kernel (Surface_array, 3, x, y)
         K, Kx, Ky = kernel (Twin, 3, x, y)
@@ -335,34 +270,36 @@ def Surface_outline (Outline_array, Surface_array, Outline_value, Nodata_value):
 
 ##########################################################################################################
 ##########################################################################################################
-def stitch_segments (segments, M_code):
+def stitch_segments (segments, M_code, reset_length = False, select_longest = True):
     """This function stitches tiny segments into something that makes sense"""
 
+    #Initiate the objects
     segments[np.isnan(segments)] = 0
-
+    L_code = 1
+    # This is the list of outlines
     M_outlines = cl.Polyline()
 
-    L_code = 1
+    # loop until all the segments are stitched
     while np.amax(segments) != 0:
         # Setup the pandas outline
         M_outline = cl.Line()
 
+        #Find the first non-null element in the array
         nonzero_x = np.where(segments[:,0]!=0)[0][0]
         nonzero_y = np.where(segments[:,1]!=0)[0][0]
 
-        # choose a random point to be the first point in the points that are not zero
+        # choose a this segment to be the first element in the Pandas
         M_outline.set_first_point(M_code, L_code, segments[nonzero_y,1], segments[nonzero_x,0], 1)
         M_outline = M_outline.add_element(1,M_code, L_code, segments[nonzero_y+1,1], segments[nonzero_x+1,0])
 
-        # Now stitch in a loop
+        # Now stitch the connected segments together in both directions. Because we're 2D, bruv!
         for d in [-1,0]:
             for i in range(3,len(segments),3):
-                #print i
+                # Find a segment that starts at the end of the previous segment
                 last_point = M_outline['rowcol'].iloc[d]
                 find_next = np.where(np.logical_and(segments[:,1] == last_point.row(), segments[:,0] == last_point.col()))[0]
-                #print find_next
-                #print segments[find_next]
 
+                # Add the segment. Invert it if need be.
                 for j in range(len(find_next)):
                     if find_next[j]/3. == find_next[j]//3:
                         M_outline = M_outline.add_element(-d*len(M_outline['rowcol']),M_code, L_code, segments[find_next[j]+1,1], segments[find_next[j]+1,0])
@@ -371,17 +308,30 @@ def stitch_segments (segments, M_code):
                         M_outline = M_outline.add_element(-d*len(M_outline['rowcol']),M_code, L_code, segments[find_next[j]-1,1], segments[find_next[j]-1,0])
                         segments[find_next[j]-1:find_next[j]+2,:] = 0
 
-        #Recalculate the distances to make it nicer. Optional
-        #M_outline = M_outline.recalc_length(1)
+        #Recalculate the distances to make it nicer. Takes a loooong time
+        if reset_length is True:
+            M_outline = M_outline.recalc_length(1)
 
+        #add this outline to the list of outlines
         M_outlines.append(M_outline)
+
+        # update the L_code counter
         L_code+=1
 
+    #This part is to group everything in one Pandas instead of a silly list
     Final_outlines = M_outlines[0]
-
     for i in range(1,len(M_outlines)):
         Final_outlines = bb.concat([Final_outlines,M_outlines[i]])
 
+    if select_longest is True:
+        Lengths = []
+        value_range = [min(Final_outlines['L_code']),max(Final_outlines['L_code'])]
+        for L in value_range:
+            Lengths.append(len(Final_outlines.loc[Final_outlines['L_code'] == L]))
+        Longest = max(Lengths)
+        for L in value_range:
+            if len(Final_outlines.loc[Final_outlines['L_code'] == L]) < 0.5 * Longest:
+                Final_outlines = Final_outlines[Final_outlines.L_code != L]
 
     return Final_outlines
 
@@ -390,21 +340,15 @@ def stitch_segments (segments, M_code):
 ##########################################################################################################
 def Pandas_outline (Surface_array, M_code, scale):
     """
+    This magic function from the internet (https://stackoverflow.com/questions/24539296/outline-a-region-in-a-graph) takes an array of positives v. negatives and outlines the border between the two. It gives you a nice Pandas Dataframe at the end.
 
-    This function calculates the shortest outline of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
     Args:
-        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
-        Outline_array (2D numpy array): a 2-D array destined to store the outline.
-        Outline_value (float): The value to be given to outline cells
-        Nodata_value (float): The value for empty cells
 
     Returns:
-        Outline_array (2D numpy array): a 2-D array populated with the outline cells.
 
     Author: GCHG
     """
 
-    #https://stackoverflow.com/questions/24539296/outline-a-region-in-a-graph
     image = Surface_array
     maskimg = np.zeros(Surface_array.shape, dtype='int')
     maskimg[image == M_code] = 3
@@ -447,7 +391,6 @@ def Pandas_outline (Surface_array, M_code, scale):
     segments[:,0] = (x0 + (x1-x0) * segments[:,0] / mapimg.shape[1]) - scale/2.
     segments[:,1] = (y0 + (y1-y0) * segments[:,1] / mapimg.shape[0]) - scale/2.
 
-
     #This is me now ^^
     M_outline = stitch_segments(segments,M_code)
 
@@ -459,11 +402,206 @@ def Pandas_outline (Surface_array, M_code, scale):
 
 
 
+
 ##########################################################################################################
 ##########################################################################################################
-def Billhook (Outline_labels_array, Marsh_array, Label_value):
+def Line_to_shp (line, Envidata, Enviarray, save_dir, file_name):
     """
-    This function takes
+    This function takes all these masses of riggly lines and turns each of them into a shapefile. This is going to take a lot of space, so we should probably think of deleting the shapefiles when we're done with them.
+
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Nothing. It just saves a bunch of shapefiles
+
+    Author: GCHG
+    """
+    X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
+    Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
+
+    Coordinates = []
+    for i in range(len(line['rowcol'])):
+        x = line['rowcol'].iloc[i].col()
+        y = line['rowcol'].iloc[i].row()
+        coord_pair = (X_cell_width * x + X_origin, Y_cell_width * y + Y_origin)
+        Coordinates.append(coord_pair)
+    # Here's an example Shapely geometry
+    poly = LineString(Coordinates)
+    # Now convert it to a shapefile with OGR
+    driver = ogr.GetDriverByName('Esri Shapefile')
+    ds = driver.CreateDataSource('%s/%s.shp' % (save_dir,file_name))
+    #ds = driver.CreateDataSource(save_dir+str(label)+'_'+str(code)+'.shp')
+    layer = ds.CreateLayer('', None, ogr.wkbLineString)
+    # Add one attribute
+    layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
+    defn = layer.GetLayerDefn()
+    ## If there are multiple geometries, put the "for" loop here
+    # Create a new feature (attribute and geometry)
+    feat = ogr.Feature(defn)
+    feat.SetField('id', 123)
+    # Make a geometry, from Shapely object
+    geom = ogr.CreateGeometryFromWkb(poly.wkb)
+    feat.SetGeometry(geom)
+    layer.CreateFeature(feat)
+    feat = geom = None  # destroy these
+    # Save and close everything
+    ds = layer = feat = geom = None
+
+    print "file saved:" '%s/%s.shp' % (save_dir,file_name)
+
+
+##########################################################################################################
+##########################################################################################################
+def Shp_to_transects (file_dir, file_name, M_code, L_code, Envidata, Enviarray):
+    """
+
+    Args:
+
+    Returns:
+
+    Author: GCHG
+    """
+    # Load the file
+    shape = fiona.open(file_dir+file_name)
+
+    # This s the environment of the raster
+    X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
+    Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
+
+    # initialise storage list
+    Transects = cl.Transect()
+    Transects.set_first_point(0, 0, 0, 0)
+
+    for i in range(len(shape)):
+        attr = shape.next()
+        geometry = attr['geometry']
+        coordinates = geometry['coordinates']
+
+        Start_row = (coordinates[0][1]-Y_origin)/Y_cell_width
+        End_row = (coordinates[1][1]-Y_origin)/Y_cell_width
+        Start_col = (coordinates[0][0]-X_origin)/X_cell_width
+        End_col = (coordinates[1][0]-X_origin)/X_cell_width
+
+        Transects = Transects.add_element(len(Transects['rowcol']), M_code, L_code, Start_row, Start_col)
+        Transects = Transects.add_element(len(Transects['rowcol']), M_code, L_code, End_row, End_col)
+
+    Transects = Transects.iloc[1:]
+    Transects = Transects.assign_transect_code()
+
+    return Transects
+
+
+##########################################################################################################
+##########################################################################################################
+def Make_transects (in_shp, out_shp, spc, sect_len):
+    #-------------------------------------------------------------------------------
+    # Name:        perp_lines.py
+    # Purpose:     Generates multiple profile lines perpendicular to an input line
+    #
+    # Author:      JamesS
+    #
+    # Created:     13/02/2013
+    #-------------------------------------------------------------------------------
+    """ Takes a shapefile containing a single line as input. Generates lines
+        perpendicular to the original with the specified length and spacing and
+        writes them to a new shapefile.
+
+        The data should be in a projected co-ordinate system.
+    """
+
+    # ##############################################################################
+    # User input
+
+    # Input shapefile. Must be a single, simple line, in projected co-ordinates
+
+
+    # The shapefile to which the perpendicular lines will be written
+
+
+    # Profile spacing. The distance at which to space the perpendicular profiles
+    # In the same units as the original shapefile (e.g. metres)
+
+
+    # Length of cross-sections to calculate either side of central line
+    # i.e. the total length will be twice the value entered here.
+    # In the same co-ordinates as the original shapefile
+
+    #https://gis.stackexchange.com/questions/50108/elevation-profile-10-km-each-side-of-a-line
+
+    # ##############################################################################
+
+    # Open the shapefile and get the data
+    source = collection(in_shp, "r")
+    data = source.next()['geometry']
+    line = LineString(data['coordinates'])
+
+    # Define a schema for the output features. Add a new field called 'Dist'
+    # to uniquely identify each profile
+    schema = source.schema.copy()
+    schema['properties']['Dist'] = 'float'
+
+    # Open a new sink for the output features, using the same format driver
+    # and coordinate reference system as the source.
+    sink = collection(out_shp, "w", driver=source.driver, schema=schema, crs=source.crs)
+
+    # Calculate the number of profiles to generate
+    n_prof = int(line.length/spc)
+
+    # Start iterating along the line
+    for prof in range(1, n_prof+1):
+        # Get the start, mid and end points for this segment
+        seg_st = line.interpolate((prof-1)*spc)
+        seg_mid = line.interpolate((prof-0.5)*spc)
+        seg_end = line.interpolate(prof*spc)
+
+        # Get a displacement vector for this segment
+        vec = np.array([[seg_end.x - seg_st.x,], [seg_end.y - seg_st.y,]])
+
+        # Rotate the vector 90 deg clockwise and 90 deg counter clockwise
+        rot_anti = np.array([[0, -1], [1, 0]])
+        rot_clock = np.array([[0, 1], [-1, 0]])
+        vec_anti = np.dot(rot_anti, vec)
+        vec_clock = np.dot(rot_clock, vec)
+
+        # Normalise the perpendicular vectors
+        len_anti = ((vec_anti**2).sum())**0.5
+        vec_anti = vec_anti/len_anti
+        len_clock = ((vec_clock**2).sum())**0.5
+        vec_clock = vec_clock/len_clock
+
+        # Scale them up to the profile length
+        vec_anti = vec_anti*sect_len
+        vec_clock = vec_clock*sect_len
+
+        # Calculate displacements from midpoint
+        prof_st = (seg_mid.x + float(vec_anti[0]), seg_mid.y + float(vec_anti[1]))
+        prof_end = (seg_mid.x + float(vec_clock[0]), seg_mid.y + float(vec_clock[1]))
+
+        # Write to output
+        rec = {'geometry':{'type':'LineString', 'coordinates':(prof_st, prof_end)},
+               'properties':{'Dist':(prof-0.5)*spc, u'id':0}}
+
+        sink.write(rec)
+
+    # Tidy up
+    source.close()
+    sink.close()
+
+
+
+
+##########################################################################################################
+##########################################################################################################
+def plot_transects_on_basemap (Lines_row, Lines_col, Basemap, save_dir, fig_name, Nodata_value):
+    """
+    This function calculates the length of several connected lines of connected cells in an Outline_array and returns lists of x,y coordinates (Line_x, Line_y) and length values (Line_dist) of the cells along the line.
+
+
+    There's a labeled array and a storage array
 
     of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
     Args:
@@ -477,29 +615,42 @@ def Billhook (Outline_labels_array, Marsh_array, Label_value):
 
     Author: GCHG
     """
-    kernel_size = 3
+    from matplotlib.lines import Line2D
+    print 'Plotting a coup'
+    Nodata_value = -1000
 
-    #Select a line to work on
-    Active_line = np.where (Outline_labels_array == Label_value)
-    num_elements = len (Active_line[0])
 
-    #If it's not empty
-    if num_elements > 0:
-        #For each cell in the line
-        for t in range(num_elements):
-            row = Active_line [0][t]
-            col = Active_line [1][t]
-            #Make a kernel of labels and of marsh values
-            K_lab, Kr_lab, Kc_lab = kernel (Outline_labels_array, kernel_size, row, col)
-            K_Mar, Kr_Mar, Kc_Mar = kernel (Marsh_array, kernel_size, row, col)
+    twin  = Basemap.copy()
 
-            #If the Kernel has 5 or more labelled cells:
-            if np.sum(K_lab) >= 5 * Label_value and np.sum(K_Mar) >= 8:
-                #Check that they don't have a full empty row or col:
-                if np.sum(K_lab[0]) > Label_value and np.sum(K_lab[2]) > Label_value and np.sum(K_lab[:,0]) > Label_value and np.sum(K_lab[:,2]) > Label_value:
-                    Outline_labels_array[row, col] = 0
+    fig_height = min(np.floor(twin.shape[1])/5, 50)
+    fig_width = min(np.floor(twin.shape[1])/5, 50)
 
-    return Outline_labels_array
+    fig=plt.figure('Some Title', facecolor='White',figsize=[fig_height,fig_width])
+    ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=2)
+    ax1.tick_params(axis='x', colors='black')
+    ax1.tick_params(axis='y', colors='black')
+
+    Vmin = min(np.amin(twin[twin!=Nodata_value])*0.95, np.amin(twin[twin!=Nodata_value])*1.05)
+    Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
+
+    Map = ax1.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+    ax2 = fig.add_axes([0.1, 0.98, 0.85, 0.02])
+    scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
+    cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
+
+    for i in range(len(Lines_row)):
+        #for j in range(len(Lines_row[i])):
+
+        Scatt = ax1.scatter(Lines_col[i][0], Lines_row[i][0], marker  = '+', color = 'b')
+        Scatt2 = ax1.scatter(Lines_col[i][-1], Lines_row[i][-1], marker = 'x', color = 'r')
+
+        Line = Line2D(Lines_col[i], Lines_row[i], color = plt.cm.gist_earth(50), alpha = 0.5)
+        ax1.add_line(Line)
+
+    #ax1.set_xlim(0, len(Basemap)-1)
+    #ax1.set_ylim(len(Basemap[0])-1, 0)
+
+    plt.savefig(save_dir+fig_name+'.png')
 
 
 
@@ -1091,212 +1242,67 @@ def Select_few_longest (Polylines):
 
 
 
-
 ##########################################################################################################
 ##########################################################################################################
-def Line_to_shp (line, Envidata, Enviarray, save_dir, file_name):
+def porthole (array, radius, row_centre, col_centre):
     """
-    This function takes all these masses of riggly lines and turns each of them into a shapefile. This is going to take a lot of space, so we should probably think of deleting the shapefiles when we're done with them.
-
+    This function defines a circular kernel within an array (array), centred on (x_centre, y_centre). The is of a width of kernel_size.
     Args:
-        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
-        Outline_array (2D numpy array): a 2-D array destined to store the outline.
-        Outline_value (float): The value to be given to outline cells
-        Nodata_value (float): The value for empty cells
+        array (2D numpy array): a 2-D array.
+        radius (float): the raidus of the circle defining the.
+        x_centre (int): The index of the element in the 1st dimension.
+        y_centre (int): The index of the element in the 2nd dimension.
 
     Returns:
-        Nothing. It just saves a bunch of shapefiles
+        kernel (2D numpy array): The kernel of selected elements.
+        kernel_row (2D numpy array): The kernel of row indices of the selected elements.
+        kernel_col (2D numpy array): The kernel of column indices of the selected elements.
 
     Author: GCHG
     """
-    X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
-    Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
 
-    Coordinates = []
-    for i in range(len(line['rowcol'])):
-        x = line['rowcol'].iloc[i].col()
-        y = line['rowcol'].iloc[i].row()
-        coord_pair = (X_cell_width * x + X_origin, Y_cell_width * y + Y_origin)
-        Coordinates.append(coord_pair)
-    # Here's an example Shapely geometry
-    poly = LineString(Coordinates)
-    # Now convert it to a shapefile with OGR
-    driver = ogr.GetDriverByName('Esri Shapefile')
-    ds = driver.CreateDataSource('%s/%s.shp' % (save_dir,file_name))
-    #ds = driver.CreateDataSource(save_dir+str(label)+'_'+str(code)+'.shp')
-    layer = ds.CreateLayer('', None, ogr.wkbLineString)
-    # Add one attribute
-    layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
-    defn = layer.GetLayerDefn()
-    ## If there are multiple geometries, put the "for" loop here
-    # Create a new feature (attribute and geometry)
-    feat = ogr.Feature(defn)
-    feat.SetField('id', 123)
-    # Make a geometry, from Shapely object
-    geom = ogr.CreateGeometryFromWkb(poly.wkb)
-    feat.SetGeometry(geom)
-    layer.CreateFeature(feat)
-    feat = geom = None  # destroy these
-    # Save and close everything
-    ds = layer = feat = geom = None
+    porthole_row = []; porthole_col = []; porthole_dist = []
 
-    print "file saved:" '%s/%s.shp' % (save_dir,file_name)
+    row_to_0 = row_centre
+    row_to_End = len(array[:,0])-row_centre
+    col_to_0 = col_centre
+    col_to_End = len(array)-col_centre
+
+    Lim_top = row_centre - min(np.floor(radius), row_to_0)
+    Lim_bottom = row_centre + min(np.floor(radius)+1, row_to_End)
+    Lim_left = col_centre - min(np.floor(radius), col_to_0)
+    Lim_right = col_centre + min(np.floor(radius)+1, col_to_End)
+
+
+    kernel = array [int(Lim_top):int(Lim_bottom), int(Lim_left):int(Lim_right)]
+
+    for row in range(len(kernel)):
+        for col in range(len(kernel[0])):
+            ROW = row_centre - radius + row # coordinates in the array
+            COL = col_centre - radius + col # coordinates in the array
+            Distance = np.sqrt((row_centre-ROW)**2 + (col_centre-COL)**2)
+
+            if Distance < radius:
+                porthole_dist.append(Distance)
+                porthole_row.append(ROW)
+                porthole_col.append(COL)
+
+    return porthole_row, porthole_col, porthole_dist
+
+
+
+
+
+
+
+
+
 
 ##########################################################################################################
 ##########################################################################################################
-def Shp_to_lines (file_dir, file_name, Envidata, Enviarray):
+def Billhook (Outline_labels_array, Marsh_array, Label_value):
     """
-    This function takes all these masses of wriggly lines and turns each of them into a shapefile. This is going to take a lot of space, so we should probably think of deleting the shapefiles when we're done with them.
-
-    Args:
-        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
-        Outline_array (2D numpy array): a 2-D array destined to store the outline.
-        Outline_value (float): The value to be given to outline cells
-        Nodata_value (float): The value for empty cells
-
-    Returns:
-        Nothing. Lines
-
-    Author: GCHG
-    """
-    # Load the file
-    shape = fiona.open(file_dir+file_name+".shp")
-
-    # This s the environment of the raster
-    X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
-    Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
-
-    # initialise storage lists
-    Transects = cl.Polyline()
-
-    for i in range(len(shape)):
-        attr = shape.next()
-        geometry = attr['geometry']
-        coordinates = geometry['coordinates']
-
-        Start_row = (coordinates[0][1]-Y_origin)/Y_cell_width
-        End_row = (coordinates[1][1]-Y_origin)/Y_cell_width
-        Start_col = (coordinates[0][0]-X_origin)/X_cell_width
-        End_col = (coordinates[1][0]-X_origin)/X_cell_width
-
-        Transect = cl.Line()
-        Transect.append(cl.Point(Start_row,Start_col)); Transect.append(cl.Point(End_row,End_col))
-
-        Transects.append(Transect)
-
-    return Transects
-
-
-##########################################################################################################
-##########################################################################################################
-def Save_transects (in_shp,out_shp, spc, sect_len):
-    #-------------------------------------------------------------------------------
-    # Name:        perp_lines.py
-    # Purpose:     Generates multiple profile lines perpendicular to an input line
-    #
-    # Author:      JamesS
-    #
-    # Created:     13/02/2013
-    #-------------------------------------------------------------------------------
-    """ Takes a shapefile containing a single line as input. Generates lines
-        perpendicular to the original with the specified length and spacing and
-        writes them to a new shapefile.
-
-        The data should be in a projected co-ordinate system.
-    """
-    import numpy as np
-    from fiona import collection
-    from shapely.geometry import LineString, MultiLineString
-
-    # ##############################################################################
-    # User input
-
-    # Input shapefile. Must be a single, simple line, in projected co-ordinates
-
-
-    # The shapefile to which the perpendicular lines will be written
-
-
-    # Profile spacing. The distance at which to space the perpendicular profiles
-    # In the same units as the original shapefile (e.g. metres)
-
-
-    # Length of cross-sections to calculate either side of central line
-    # i.e. the total length will be twice the value entered here.
-    # In the same co-ordinates as the original shapefile
-
-    #https://gis.stackexchange.com/questions/50108/elevation-profile-10-km-each-side-of-a-line
-
-    # ##############################################################################
-
-    # Open the shapefile and get the data
-    source = collection(in_shp, "r")
-    data = source.next()['geometry']
-    line = LineString(data['coordinates'])
-
-    # Define a schema for the output features. Add a new field called 'Dist'
-    # to uniquely identify each profile
-    schema = source.schema.copy()
-    schema['properties']['Dist'] = 'float'
-
-    # Open a new sink for the output features, using the same format driver
-    # and coordinate reference system as the source.
-    sink = collection(out_shp, "w", driver=source.driver, schema=schema, crs=source.crs)
-
-    # Calculate the number of profiles to generate
-    n_prof = int(line.length/spc)
-
-    # Start iterating along the line
-    for prof in range(1, n_prof+1):
-        # Get the start, mid and end points for this segment
-        seg_st = line.interpolate((prof-1)*spc)
-        seg_mid = line.interpolate((prof-0.5)*spc)
-        seg_end = line.interpolate(prof*spc)
-
-        # Get a displacement vector for this segment
-        vec = np.array([[seg_end.x - seg_st.x,], [seg_end.y - seg_st.y,]])
-
-        # Rotate the vector 90 deg clockwise and 90 deg counter clockwise
-        rot_anti = np.array([[0, -1], [1, 0]])
-        rot_clock = np.array([[0, 1], [-1, 0]])
-        vec_anti = np.dot(rot_anti, vec)
-        vec_clock = np.dot(rot_clock, vec)
-
-        # Normalise the perpendicular vectors
-        len_anti = ((vec_anti**2).sum())**0.5
-        vec_anti = vec_anti/len_anti
-        len_clock = ((vec_clock**2).sum())**0.5
-        vec_clock = vec_clock/len_clock
-
-        # Scale them up to the profile length
-        vec_anti = vec_anti*sect_len
-        vec_clock = vec_clock*sect_len
-
-        # Calculate displacements from midpoint
-        prof_st = (seg_mid.x + float(vec_anti[0]), seg_mid.y + float(vec_anti[1]))
-        prof_end = (seg_mid.x + float(vec_clock[0]), seg_mid.y + float(vec_clock[1]))
-
-        # Write to output
-        rec = {'geometry':{'type':'LineString', 'coordinates':(prof_st, prof_end)},
-               'properties':{'Dist':(prof-0.5)*spc, u'id':0}}
-
-        sink.write(rec)
-
-    # Tidy up
-    source.close()
-    sink.close()
-
-
-
-
-##########################################################################################################
-##########################################################################################################
-def plot_transects_on_basemap (Lines_row, Lines_col, Basemap, save_dir, fig_name, Nodata_value):
-    """
-    This function calculates the length of several connected lines of connected cells in an Outline_array and returns lists of x,y coordinates (Line_x, Line_y) and length values (Line_dist) of the cells along the line.
-
-
-    There's a labeled array and a storage array
+    This function takes
 
     of a surface within an array (Surface_array) where the element to outline has a value of 1, and stores that outline in a second array (Outline_array) under the value Outline_value.
     Args:
@@ -1310,50 +1316,29 @@ def plot_transects_on_basemap (Lines_row, Lines_col, Basemap, save_dir, fig_name
 
     Author: GCHG
     """
-    from matplotlib.lines import Line2D
-    print 'Plotting a coup'
-    Nodata_value = -1000
+    kernel_size = 3
 
+    #Select a line to work on
+    Active_line = np.where (Outline_labels_array == Label_value)
+    num_elements = len (Active_line[0])
 
-    twin  = Basemap.copy()
+    #If it's not empty
+    if num_elements > 0:
+        #For each cell in the line
+        for t in range(num_elements):
+            row = Active_line [0][t]
+            col = Active_line [1][t]
+            #Make a kernel of labels and of marsh values
+            K_lab, Kr_lab, Kc_lab = kernel (Outline_labels_array, kernel_size, row, col)
+            K_Mar, Kr_Mar, Kc_Mar = kernel (Marsh_array, kernel_size, row, col)
 
-    fig_height = min(np.floor(twin.shape[1])/5, 50)
-    fig_width = min(np.floor(twin.shape[1])/5, 50)
+            #If the Kernel has 5 or more labelled cells:
+            if np.sum(K_lab) >= 5 * Label_value and np.sum(K_Mar) >= 8:
+                #Check that they don't have a full empty row or col:
+                if np.sum(K_lab[0]) > Label_value and np.sum(K_lab[2]) > Label_value and np.sum(K_lab[:,0]) > Label_value and np.sum(K_lab[:,2]) > Label_value:
+                    Outline_labels_array[row, col] = 0
 
-    fig=plt.figure('Some Title', facecolor='White',figsize=[fig_height,fig_width])
-    ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=2)
-    ax1.tick_params(axis='x', colors='black')
-    ax1.tick_params(axis='y', colors='black')
-
-    Vmin = min(np.amin(twin[twin!=Nodata_value])*0.95, np.amin(twin[twin!=Nodata_value])*1.05)
-    Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
-
-    Map = ax1.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
-    ax2 = fig.add_axes([0.1, 0.98, 0.85, 0.02])
-    scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
-    cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
-
-    for i in range(len(Lines_row)):
-        #for j in range(len(Lines_row[i])):
-
-        Scatt = ax1.scatter(Lines_col[i][0], Lines_row[i][0], marker  = '+', color = 'b')
-        Scatt2 = ax1.scatter(Lines_col[i][-1], Lines_row[i][-1], marker = 'x', color = 'r')
-
-        Line = Line2D(Lines_col[i], Lines_row[i], color = plt.cm.gist_earth(50), alpha = 0.5)
-        ax1.add_line(Line)
-
-    #ax1.set_xlim(0, len(Basemap)-1)
-    #ax1.set_ylim(len(Basemap[0])-1, 0)
-
-    plt.savefig(save_dir+fig_name+'.png')
-
-
-
-
-
-
-
-
+    return Outline_labels_array
 
 
 

@@ -73,115 +73,6 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
     ######
     #TEST ZONE STARTS
     ######
-    """import pandas as bb
-
-    #A = Point(1,2)
-    A = Point(1,2)
-    print A
-    print A.row()
-    print
-
-    B = Transect()
-
-    print B
-    print type(B)
-    print
-
-    B.set_first_point(1, 1, 0, 3, 1)
-
-    print B
-    print type(B), B['L_code'].size
-
-    B = B.add_element(1,1,1,4,3,1)
-
-    print B
-    print type(B)
-
-
-    C = B.subdivide(4)
-
-    print C
-    print
-
-
-    arr = np.asarray([[0,1,2,3,4],
-           [0,1,2,3,4],
-           [0,1,2,4,4],
-           [0,1,2,5,16],
-           [0,1,2,7,12],])
-
-    arr2 = np.asarray([[0,1,1,1,0],
-       [0,1,2,0,4],
-       [0,1,2,1,4],
-       [0,1,2,1,16],
-       [0,1,2,1,12],])
-
-
-
-
-    C = C.extract_values_from_basemap(arr,'Z', -1)
-    C = C.extract_values_from_basemap(arr2,'Marsh', -1)
-
-    C = C.orient_seaward()
-    C = C.select_transect()
-
-    print C
-    print
-
-    C = C.remove_element(2)
-
-    print C
-    print
-
-
-
-    print '#############################'
-    print
-
-
-    from random import randint
-
-    Marsh = Marsh_platform(50,60)
-    Marsh[:] = 1
-    DEM = Marsh_platform(50,60)
-    for i in range(len(DEM)):
-        for j in range(len(DEM[0])):
-            DEM[i,j] = DEM[i,j] * randint(1,5)
-
-    # Modify the marsh
-    Marsh[0:30,:] = 0
-    Marsh[0:20,0:15] = 1
-    Marsh[30:,20] = 0
-    Marsh[4:26,25:48] = 1
-    Marsh[12:14,30:48] = 0
-    Marsh[38:40,40:45] = 0
-    Marsh[31, 6:10] = 0
-    Marsh[8, 14:15] = 0
-    Marsh[7:9, 13] = 0
-    Marsh[6:11, 5:13] = 0
-    Marsh[30:32, 19] = 0
-    Marsh[30, 18:20] = 0
-    Marsh[3:5, 47:49] = 1
-    Marsh[25:27, 26] = 1
-    Marsh[28, 29:35] = 1
-    Marsh[29, 29] = 1
-    Marsh[29, 35] = 1
-    Marsh[18, 5:9] = 0
-    Marsh[20:27, 41] = 0
-    Marsh[2:7, 25:30] = 1
-    Marsh[30:35, 0] = 0
-    Marsh[30:35, 53] = 0
-    Marsh[36:39, 53] = 0
-    Marsh[49,20:60] = 0
-    Marsh[:,-1] = 0
-
-    Marsh = Marsh.label_connected (Nodata_value)
-
-    Marsh.plot_map(Output_dir+'Figures/', '000_Test_marsh', 'Sous-fifre', Nodata_value)
-
-    Outlines = Marsh.extract_outlines()
-
-    Outlines.plot_on_basemap(Marsh, Output_dir+'Figures/', '001_Test_lines', Nodata_value)"""
 
 
     ######
@@ -223,11 +114,11 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         print Marsh.shape
 
 
-        #DEM = DEM [700:1000,:]
-        #Marsh = Marsh [700:1000,:]
+        DEM = DEM [700:1000,200:500]
+        Marsh = Marsh [700:1000,200:500]
 
-        DEM = DEM [700:1600,100:700]
-        Marsh = Marsh [700:1600,100:700]
+        #DEM = DEM [700:1600,100:700]
+        #Marsh = Marsh [700:1600,100:700]
 
 
         """Marsh = np.ones((50,60), dtype = np.float)
@@ -277,8 +168,20 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Outlines = Marsh_labels.extract_outlines()
 
         Outlines.plot_on_basemap(Marsh_labels, Output_dir+'Figures/', '001_Test_lines', Nodata_value)
+        Outlines.plot_on_basemap(Marsh_labels, Output_dir+'Figures/', '001_Test_lines', Nodata_value)
+
+        Outlines.save_to_shp (envidata_DEM, DEM, Output_dir+'Shapefiles/', site)
+
+        All_transects = Outlines.Polyline_transects(10,20, envidata_DEM, DEM, Output_dir, site)
 
         quit()
+
+
+
+
+
+
+
 
         #Make a proper object for the outline
         Outline_object = 0*Marsh_outline(Marsh.shape[0], Marsh.shape[1])

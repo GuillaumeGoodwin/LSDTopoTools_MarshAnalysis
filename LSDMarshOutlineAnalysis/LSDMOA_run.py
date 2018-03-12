@@ -114,8 +114,8 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         print Marsh.shape
 
 
-        DEM = DEM [700:1000,200:500]
-        Marsh = Marsh [700:1000,200:500]
+        DEM = DEM [800:1000,300:500]
+        Marsh = Marsh [800:1000,300:500]
 
         #DEM = DEM [700:1600,100:700]
         #Marsh = Marsh [700:1600,100:700]
@@ -173,6 +173,13 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Outlines.save_to_shp (envidata_DEM, DEM, Output_dir+'Shapefiles/', site)
 
         All_transects = Outlines.Polyline_transects(10,20, envidata_DEM, DEM, Output_dir, site)
+
+        All_transects = All_transects.get_attribute_from_basemap (3, DEM, 'Z', Nodata_value)
+        All_transects = All_transects.get_attribute_from_basemap (3, Marsh, 'Marsh', Nodata_value)
+
+        # We now have transects.
+        # We shold plot them depending on their selectedness ^^
+        # Then we can extract some stuff.
 
         quit()
 

@@ -382,7 +382,6 @@ class Line (bb.DataFrame):
 
     def Line_transects (self, spacing, length, Envidata, Enviarray, save_dir, site_name):
         Transects = Transect()
-
         value_range = [min(self['L_code']),max(self['L_code'])]
         for L in value_range:
             To_save = self.loc[self['L_code'] == L]
@@ -390,15 +389,14 @@ class Line (bb.DataFrame):
             L_code = To_save['L_code'][0]
             in_name = str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'.shp'
             out_name = str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'_Tr.shp'
-
             fct.Make_transects(save_dir+'Shapefiles/'+in_name, save_dir+'Shapefiles/'+out_name, spacing, length)
-
             Trans = fct.Shp_to_transects (save_dir+"Shapefiles/", out_name, M_code, L_code, Envidata, Enviarray)
-
-            print Trans
-
-
+            if Trans.size>0:
+                Transects = Transects.append(Trans)
         return Transects
+
+
+
 
 
 
@@ -428,29 +426,56 @@ class Transect (Line):
     def assign_transect_code (self):
         Tr_codes = []
         for i in range(len(self['rowcol'])//2):
-            Tr_codes.append(i+1); Tr_codes.append(i+1)
-
-
+            Tr_codes.append(int(i+1)); Tr_codes.append(int(i+1))
         self = self.add_attribute_list('T_code',Tr_codes)
         return self
 
+    def add_transect_element  (self, position, M_code, L_code, T_code, row, col, scale = 1):
+        """position must be positive"""
+        length = scale * Point(row,col).Dist_to_point(self['rowcol'].iloc[position-1]) + self['length'].iloc[position-1]
+        element = bb.DataFrame({'M_code': [M_code],'L_code': [L_code],'T_code': [T_code], 'rowcol':[Point(row,col)], 'length':[length]})
+        top = self[0:position]; bottom = self[position:]
+        self=bb.concat((top,element,bottom))
+        self = self.reset_index(drop=True)
+        return self
 
-    def subdivide (self,sub_number):
-        """Only works if the initial line only has two points."""
+
+
+    def single_subdivide (self,sub_number):
         if len(self['rowcol']) == 2:
-            sub_row = []; sub_col = []; sub_dist = []
+            sub_row = []; sub_col = [] #; sub_dist = []
             for sub in range(1,sub_number):
                 point_1 = self['rowcol'].iloc[0]; point_2 = self['rowcol'].iloc[-1]
                 sub_row.append(point_1.row() + sub * float(point_2.row()-point_1.row())/sub_number)
                 sub_col.append(point_1.col() + sub * float(point_2.col()-point_1.col())/sub_number)
-                sub_dist.append(sub * point_1.Dist_to_point(point_2)/sub_number)
+                #sub_dist.append(sub * point_1.Dist_to_point(point_2)/sub_number)
             for sub in range(0,sub_number-1):
                 position = len(self['rowcol'])-1
-                self = self.add_element (position, self['M_code'].iloc[0], self['L_code'].iloc[0], sub_row[sub], sub_col[sub])
+                self = self.add_transect_element (position, self['M_code'].iloc[0], self['L_code'].iloc[0], self['T_code'].iloc[0], sub_row[sub], sub_col[sub])
         return self
 
 
+    def multiple_subdivide (self,sub_number):
+        """Only works if the initial line only has two points."""
+        new_self = Transect(); new_self.set_first_point(0, 0, 0, 0)
+        new_self = new_self.add_attribute_list ('T_code', [0])
+        L_range = range(min(self['L_code']),max(self['L_code'])+1)
+        for L in L_range:
+            L_self = self.loc[self['L_code'] == L]
+            T_range = range(min(self['T_code']),max(self['T_code'])+1)
+            for T in T_range:
+                T_self = L_self.loc[L_self['T_code'] == T]
+                T_self = T_self.single_subdivide(sub_number)
+                new_self = new_self.append(T_self)
+        return new_self
+
+
+
+
     def orient_seaward (self):
+
+        """Use slices and you'll be fine"""
+
         """Only use if you aready have a Z attribute"""
         if self['Z'].iloc[0] < self['Z'].iloc[-1]:
             self = self.sort_index(ascending = False)
@@ -459,7 +484,12 @@ class Transect (Line):
 
 
     def select_transect (self):
-        """Only use if you aready have a Marsh attribute"""
+
+
+        """Use slices and you'll be fine"""
+
+        
+        """Only use if you already have a Marsh attribute"""
         Zeros = np.where(np.asarray(self['Marsh']) < 0.5)
         Ones = np.where(np.asarray(self['Marsh']) > 0.5)
         if len(Zeros[0]) == 0 or len(Ones[0]) == 0:
@@ -503,52 +533,26 @@ class Polyline (list):
         #if you haven't done so yet, save your polyline to a .shp
         if needs_saving is True:
             self.save_to_shp (Envidata, Enviarray, save_dir, site_name)
-
         #Make a Polyline to store all those transects
         All_transects = Polyline()
-
         # For each Line in the Polyline
         for i in range(len(self)):
-            self[i].Line_transects(spacing, length, Envidata, Enviarray, save_dir, site_name)
-
-        quit()
-
-
-        """print " \nThe label is:", label+1
-        Label_transects = Polyline()
-
-        if len(self[label]) > 0:
-            for code in range(len(self[label])):
-                print "  Saving code number ", code+1
-                fct.Save_transects(save_dir+'Shapefiles/'+'%s_%s_%s.shp' % (site_name,label, code),save_dir+'Shapefiles/'+'%s_%s_%s_Tr.shp' % (site_name,label, code), spacing, length)
-                # STEP 4: Put the transect lines into our array reference system
-                Code_transects = fct.Shp_to_lines (save_dir+"Shapefiles/", "%s_%s_%s_Tr" % (site_name,label, code), Envidata, Enviarray)
-
-                Label_transects.append(Code_transects)
-
-        All_transects.append(Label_transects)"""
-
+            Transects = self[i].Line_transects(spacing, length, Envidata, Enviarray, save_dir, site_name)
+            All_transects.append(Transects)
         return All_transects
 
 
+    def get_attribute_from_basemap (self, refinement, basemap, attr_name, Nodata_value):
+        for i in range(len(self)):
+            if self[i].size > 0:
+                self[i] = self[i].multiple_subdivide(refinement)
+                self[i] = self[i].extract_values_from_basemap (basemap, attr_name, Nodata_value)
 
+                if attr_name == 'Z':
+                    self[i] = self[i].multiple_orient_seaward()
 
-
-    def transect_properties (self, refinement, basemap):
-        Structure_list = self.structure()
-
-        if len(Structure_list) == 4 and Structure_list[-1] is Point:
-            for i in range(len(self)):
-                for j in range(len(self[i])):
-                    self[i][j] = self[i][j].subdivide(refinement)
-                    self[i][j] = self[i][j].extract_values(basemap)
-
-        elif len(Structure_list) == 5 and Structure_list[-1] is Point:
-            for h in range(len(self)):
-                    for i in range(len(self[h])):
-                        for j in range(len(self[h][i])):
-                            self[h][i][j] = self[h][i][j].subdivide(refinement)
-                            self[h][i][j] = self[h][i][j].extract_values(basemap)
+                if attr_name == 'Marsh':
+                    self[i] = self[i].multiple_select_transect()
 
         return self
 

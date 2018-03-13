@@ -67,7 +67,6 @@ class Land_surface (np.ndarray):
         return new_array
 
 
-
     def extract_outlines (self):
         print 'extracting outlines'
         M_labels = range (int(np.amin(self[self>0])), int(np.amax(self[self>0]))+1, 1)
@@ -76,7 +75,6 @@ class Land_surface (np.ndarray):
             print '.... Label ', M
             M_outlines = fct.Pandas_outline(self,M,1)
             Outlines.append(M_outlines)
-
         return Outlines
 
 
@@ -343,7 +341,7 @@ class Line (bb.DataFrame):
 
 
     def Pandaline_to_shp (self, Envidata, Enviarray, save_dir, site_name):
-        value_range = [min(self['L_code']),max(self['L_code'])]
+        value_range = range(min(self['L_code']),max(self['L_code']))
         for L in value_range:
             To_save = self.loc[self['L_code'] == L]
             M_code = To_save['M_code'][0]
@@ -352,11 +350,14 @@ class Line (bb.DataFrame):
             fct.Line_to_shp(To_save, Envidata, Enviarray, save_dir, file_name)
 
 
-    def prepare_for_plotting(self,colour,transparence = 0.5):
+    def prepare_for_plotting(self,colour,opaque = True):
         Line_row = []; Line_col = []
         for i in range(len(self['rowcol'])):
             Line_row.append(self['rowcol'].iloc[i].row()); Line_col.append(self['rowcol'].iloc[i].col())
-        Line = Line2D(Line_col, Line_row, color = plt.cm.gist_earth(50*colour), alpha = transparence)
+        if opaque == False:
+            Line = Line2D(Line_col, Line_row, color = plt.cm.gist_earth(50*colour), alpha = 0.3)
+        else:
+            Line = Line2D(Line_col, Line_row, color = plt.cm.gist_earth(50*colour), alpha = 1)
         return Line
 
 
@@ -364,7 +365,7 @@ class Line (bb.DataFrame):
         prop_list = []
         for i in range(len(self['rowcol'])):
             point = self['rowcol'].iloc[i]
-            if int(point.row()) < basemap.shape[0] and int(point.col()) < basemap.shape[1]:
+            if int(point.row()) < basemap.shape[0] and int(point.col()) < basemap.shape[1] and int(point.row()) > 0 and int(point.col()) > 0:
                 value = basemap[int(point.row()), int(point.col())]
             else:
                 value = Nodata_value
@@ -382,7 +383,7 @@ class Line (bb.DataFrame):
 
     def Line_transects (self, spacing, length, Envidata, Enviarray, save_dir, site_name):
         Transects = Transect()
-        value_range = [min(self['L_code']),max(self['L_code'])]
+        value_range = range(min(self['L_code']),max(self['L_code']))
         for L in value_range:
             To_save = self.loc[self['L_code'] == L]
             M_code = To_save['M_code'][0]
@@ -394,23 +395,6 @@ class Line (bb.DataFrame):
             if Trans.size>0:
                 Transects = Transects.append(Trans)
         return Transects
-
-
-
-
-
-
-    def property_indices (self):
-        indices = []
-        for i in range(len(self)):
-            if type(self[i]) is List:
-                indices.append(i)
-        return indices
-
-
-
-
-
 
 
 ##########################################################################################################
@@ -430,6 +414,7 @@ class Transect (Line):
         self = self.add_attribute_list('T_code',Tr_codes)
         return self
 
+
     def add_transect_element  (self, position, M_code, L_code, T_code, row, col, scale = 1):
         """position must be positive"""
         length = scale * Point(row,col).Dist_to_point(self['rowcol'].iloc[position-1]) + self['length'].iloc[position-1]
@@ -440,15 +425,13 @@ class Transect (Line):
         return self
 
 
-
     def single_subdivide (self,sub_number):
         if len(self['rowcol']) == 2:
-            sub_row = []; sub_col = [] #; sub_dist = []
+            sub_row = []; sub_col = []
             for sub in range(1,sub_number):
                 point_1 = self['rowcol'].iloc[0]; point_2 = self['rowcol'].iloc[-1]
                 sub_row.append(point_1.row() + sub * float(point_2.row()-point_1.row())/sub_number)
                 sub_col.append(point_1.col() + sub * float(point_2.col()-point_1.col())/sub_number)
-                #sub_dist.append(sub * point_1.Dist_to_point(point_2)/sub_number)
             for sub in range(0,sub_number-1):
                 position = len(self['rowcol'])-1
                 self = self.add_transect_element (position, self['M_code'].iloc[0], self['L_code'].iloc[0], self['T_code'].iloc[0], sub_row[sub], sub_col[sub])
@@ -467,38 +450,63 @@ class Transect (Line):
                 T_self = L_self.loc[L_self['T_code'] == T]
                 T_self = T_self.single_subdivide(sub_number)
                 new_self = new_self.append(T_self)
+        new_self = new_self.iloc[1:]
         return new_self
 
 
-
-
     def orient_seaward (self):
-
-        """Use slices and you'll be fine"""
-
+        """Leave the Nodata_values as they are for now."""
         """Only use if you aready have a Z attribute"""
-        if self['Z'].iloc[0] < self['Z'].iloc[-1]:
-            self = self.sort_index(ascending = False)
-            self = self.reset_index(drop = True)
+        if self.size > 0:
+            step = max(self.index)+1
+            for i in range(0,len(self['rowcol']),step):
+                Start = i; End = i+step
+                if self['Z'].iloc[Start] < self['Z'].iloc[End-1]:
+                    New = self.iloc[Start:End].sort_index(ascending = False)
+                    New = New.reset_index(drop = True)
+                    self.iloc[Start:End] = New
         return self
 
 
-    def select_transect (self):
-
-
-        """Use slices and you'll be fine"""
-
-        
+    def select_transect (self, Nodata_value):
         """Only use if you already have a Marsh attribute"""
-        Zeros = np.where(np.asarray(self['Marsh']) < 0.5)
-        Ones = np.where(np.asarray(self['Marsh']) > 0.5)
-        if len(Zeros[0]) == 0 or len(Ones[0]) == 0:
-            self.add_attribute_list ('select', False)
-        elif min(Zeros[0])<max(Ones[0]):
-            self.add_attribute_list ('select', False)
-        else:
-            self.add_attribute_list ('select', True)
+        if self.size > 0:
+            Select_list = []
+            step = max(self.index)+1
+            for i in range(0,len(self['rowcol']),step):
+                Start = i; End = i+step
+                Zeros = np.where(np.asarray(self['Marsh'].iloc[Start:End]) < 0.5)
+                Ones = np.where(np.asarray(self['Marsh'].iloc[Start:End]) > 0.5)
+                if len(Zeros[0]) == 0 or len(Ones[0]) == 0:
+                    for j in range(step):
+                        Select_list.append(False)
+                elif min(Zeros[0])<max(Ones[0]):
+                    for j in range(step):
+                        Select_list.append(False)
+                elif min(self['Marsh'].iloc[Start:End]) == Nodata_value:
+                    for j in range(step):
+                        Select_list.append(False)
+                else:
+                    for j in range(step):
+                        Select_list.append(True)
+            self.add_attribute_list ('select', Select_list)
         return self
+
+
+    def get_statistics (self):
+        """ Objects are are for Mean, Stdev, """
+        if self.size > 0:
+            step = max(self.index)+1
+            Mean = self[:step].copy(deep=True); Stdev = self[:step].copy(deep=True)
+            for i in range(0,step):
+                Selected = self.loc[self['select'] == True].loc[i]
+                Mean['Z'].loc[i] = np.mean(Selected['Z'])
+                Mean['length'].loc[i] = i; Mean['select'].loc[i] = True
+                Stdev['Z'].loc[i] = np.std(Selected['Z'])
+                Stdev['length'].loc[i] = i; Stdev['select'].loc[i] = True
+        else:
+            Mean = self.copy(deep=True); Stdev = self.copy(deep=True)
+        return Mean, Stdev
 
 
 
@@ -547,26 +555,21 @@ class Polyline (list):
             if self[i].size > 0:
                 self[i] = self[i].multiple_subdivide(refinement)
                 self[i] = self[i].extract_values_from_basemap (basemap, attr_name, Nodata_value)
-
                 if attr_name == 'Z':
-                    self[i] = self[i].multiple_orient_seaward()
-
+                    self[i] = self[i].orient_seaward()
                 if attr_name == 'Marsh':
-                    self[i] = self[i].multiple_select_transect()
-
+                    self[i] = self[i].select_transect(Nodata_value)
         return self
 
 
 
-    def select_transects_from_property (self, condition):
+    """def select_transects_from_property (self, condition):
         Structure_list = self.structure()
-
         if len(Structure_list) == 4 and Structure_list[-1] is Point:
             for i in range(len(self)):
                 for j in range(len(self[i])):
                     self[i][j].orient_seaward()
                     self[i][j].select_line(condition)
-
         elif len(Structure_list) == 5 and Structure_list[-1] is Point:
             for h in range(len(self)):
                     for i in range(len(self[h])):
@@ -574,58 +577,20 @@ class Polyline (list):
                             self[h][i][j].orient_seaward()
                             self[h][i][j].select_line(condition)
 
-        return self
+        return self"""
 
 
 
 
-    def transect_stats (self, refinement):
-        Structure_list = self.structure()
-
-        if len(Structure_list) == 4 and Structure_list[-1] is Point:
-            for i in range(len(self)):
-                for j in range(len(self[i])):
-                    values = self[i][j][-2]
-
-
-        elif len(Structure_list) == 5 and Structure_list[-1] is Point:
-            for h in range(len(self)):
-                    for i in range(len(self[h])):
-
-                        # this contains values to consider for stats
-                        Polyline_values = np.zeros((len(self[h][i]), refinement+1), dtype = np.float)
-
-                        for j in range(len(self[h][i])): # j is the index of each line in the polyline
-                            for k in range(len(self[h][i][j][-2])): # k is the index of each point in the line
-                                if self[h][i][j][-1] == True:
-                                    Polyline_values[j,k] = self[h][i][j][-2][k]
-
-                        Polyline_mean = np.zeros(refinement+1, dtype = np.float)
-                        Polyline_stdev = np.zeros(refinement+1, dtype = np.float)
-
-                        if len(Polyline_values) > 1:
-                            if len(Polyline_values[0]) > 1:
-
-                                for col in range(len(Polyline_values[0])):
-                                    Polyline_mean[col] = np.sum(Polyline_values[:,col])/np.count_nonzero(Polyline_values[:,col])
-
-                                    for row in range(len(Polyline_values)):
-                                        if Polyline_values[row,col] != 0:
-                                            Polyline_stdev[col] += (Polyline_values[row,col]-Polyline_mean[col])**2
-
-                                    Polyline_stdev[col] = np.sqrt(Polyline_stdev[col]/ np.count_nonzero(Polyline_values[:,col]))
-
-
-                        Polyline_mean[np.isnan(Polyline_mean)] = 0
-                        Polyline_stdev[np.isnan(Polyline_stdev)] = 0
-
-                        self[h][i].append(Polyline_mean)
-                        self[h][i].append(Polyline_stdev)
-
-                        #print self[h][i]
-                        #print
-
-        return self
+    def Polyline_stats (self):
+        Mean_polyline = Polyline()
+        Stdev_polyline = Polyline()
+        for i in range(len(self)):
+            Transects = self[i]
+            Transects_mean,Transects_stdev = Transects.get_statistics()
+            Mean_polyline.append(Transects_mean)
+            Stdev_polyline.append(Transects_stdev)
+        return Mean_polyline, Stdev_polyline
 
 
 
@@ -660,6 +625,45 @@ class Polyline (list):
                 ax1.scatter(Pandaline_slice['rowcol'].iloc[0].col(),Pandaline_slice['rowcol'].iloc[0].row())
 
         plt.savefig(save_dir+figname+'.png')
+
+
+
+    def plot_transects_on_basemap(self,basemap, save_dir, figname, Nodata_value):
+        'Plotting on basemap'
+        twin  = basemap.copy()
+        #Make the canvas
+        fig_height = min(np.floor(twin.shape[1])/5, 50); fig_width = min(np.floor(twin.shape[1])/5, 50)
+        fig=plt.figure(figname, facecolor='White',figsize=[fig_height,fig_width])
+        ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=2)
+        ax1.tick_params(axis='x', colors='black')
+        ax1.tick_params(axis='y', colors='black')
+
+        # Make the basemap
+        Vmin = min(np.amin(twin[twin!=Nodata_value])*0.95, np.amin(twin[twin!=Nodata_value])*1.05)
+        Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
+
+        Map = ax1.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+        ax2 = fig.add_axes([0.1, 0.98, 0.85, 0.02])
+        scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
+        cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
+
+        # Draw the lines, panda style
+        for i in range(len(self)):
+            Pandaline = self[i]
+            if Pandaline.size > 0:
+                L_labels = range (1,max(Pandaline['L_code'])+1)
+                for L in L_labels:
+                    Pandaline_slice = Pandaline.loc[Pandaline['L_code'] == L]
+                    #print Pandaline_slice
+                    if Pandaline_slice.size > 0:
+                        T_labels = range (1,max(Pandaline_slice['T_code'])+1)
+                        for T in T_labels:
+                            Pandaline_zest = Pandaline_slice.loc[Pandaline_slice['T_code'] == T]
+                            To_draw = Pandaline_zest.prepare_for_plotting(i,opaque = Pandaline_zest['select'].iloc[0])
+                            ax1.add_line(To_draw)
+                            ax1.scatter(Pandaline_slice['rowcol'].iloc[0].col(),Pandaline_slice['rowcol'].iloc[0].row())
+
+        plt.savefig(save_dir+figname+'_Tr.png')
 
 
 

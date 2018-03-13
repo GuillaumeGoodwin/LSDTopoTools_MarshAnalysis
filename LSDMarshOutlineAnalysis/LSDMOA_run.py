@@ -114,8 +114,9 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         print Marsh.shape
 
 
-        DEM = DEM [800:1000,300:500]
-        Marsh = Marsh [800:1000,300:500]
+
+        DEM = DEM [800:1000,200:400]
+        Marsh = Marsh [800:1000,200:400]
 
         #DEM = DEM [700:1600,100:700]
         #Marsh = Marsh [700:1600,100:700]
@@ -165,17 +166,30 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
 
         Marsh_labels.plot_map(Output_dir+'Figures/', '000_Test_marsh', 'Sous-fifre', Nodata_value)
 
+
+
         Outlines = Marsh_labels.extract_outlines()
 
+        """Got rid of that to save time"""
         Outlines.plot_on_basemap(Marsh_labels, Output_dir+'Figures/', '001_Test_lines', Nodata_value)
-        Outlines.plot_on_basemap(Marsh_labels, Output_dir+'Figures/', '001_Test_lines', Nodata_value)
-
         Outlines.save_to_shp (envidata_DEM, DEM, Output_dir+'Shapefiles/', site)
 
         All_transects = Outlines.Polyline_transects(10,20, envidata_DEM, DEM, Output_dir, site)
+        All_transects = All_transects.get_attribute_from_basemap (20, DEM, 'Z', Nodata_value)
+        All_transects = All_transects.get_attribute_from_basemap (1, Marsh_object, 'Marsh', Nodata_value)
 
-        All_transects = All_transects.get_attribute_from_basemap (3, DEM, 'Z', Nodata_value)
-        All_transects = All_transects.get_attribute_from_basemap (3, Marsh, 'Marsh', Nodata_value)
+        All_transects.plot_transects_on_basemap(Marsh_labels, Output_dir+'Figures/', '002_LINETEST', Nodata_value)
+
+
+
+
+        # You can faff with the directions later
+
+        All_transects_stats = All_transects.Polyline_stats()
+
+        All_transects.plot_property_stats(Output_dir+'Figures/', '17_PLOTTEST',-2)
+
+
 
         # We now have transects.
         # We shold plot them depending on their selectedness ^^

@@ -21,22 +21,13 @@ import numpy as np
 import cPickle
 import timeit
 import os
-
-# A very useful package
+from random import randint
+import pandas as bb
 
 from LSDMOA_classes import *
+from LSDMOA_functions import *
 
-from LSDMOA_functions import ENVI_raster_binary_to_2d_array
-from LSDMOA_functions import ENVI_raster_binary_from_2d_array
-#from LSDMOA_functions import plot_lines_on_basemap
-#from LSDMOA_functions import plot_transects_on_basemap
-from LSDMOA_functions import Select_few_longest
-from LSDMOA_functions import Line_to_shp
-#from LSDMOA_functions import Generate_transects
-#from LSDMOA_functions import Shp_to_lines
-from random import randint
 
-import pandas as bb
 
 
 
@@ -122,6 +113,54 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         #Marsh = Marsh [700:1600,100:700]
 
 
+        # Here begins the actual MOA
+        print "\nRunning the analysis"
+
+        # STEP 1: Make the lines
+        #Make a proper object for the marsh
+        Marsh_object = Marsh_platform(Marsh.shape[0], Marsh.shape[1])
+        Marsh_object = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)
+        Marsh_DEM = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = False)
+        Marsh_labels = Marsh_object.label_connected (Nodata_value)
+
+        Marsh_labels.plot_map(Output_dir+'Figures/', '000_Test_marsh', 'Sous-fifre', Nodata_value)
+
+
+
+        Outlines = Marsh_labels.extract_outlines()
+
+        """Got rid of that to save time"""
+        #Outlines.plot_on_basemap(Marsh_labels, Output_dir+'Figures/', '001_Test_lines', Nodata_value)
+        Outlines.save_to_shp (envidata_DEM, DEM, Output_dir+'Shapefiles/', site)
+
+        All_transects = Outlines.Polyline_transects(10,20, envidata_DEM, DEM, Output_dir, site)
+        All_transects = All_transects.get_attribute_from_basemap (20, DEM, 'Z', Nodata_value)
+        All_transects = All_transects.get_attribute_from_basemap (1, Marsh_object, 'Marsh', Nodata_value)
+
+        #All_transects.plot_transects_on_basemap(Marsh_labels, Output_dir+'Figures/', '002_LINETEST', Nodata_value)
+
+
+        # You can faff with the directions later
+
+        All_transects_mean, All_transects_stdev = All_transects.Polyline_stats()
+
+        All_transects_mean.Save_as_pickle(Output_dir+'Marsh_metrics/',str(site)+'_mean.pkl')
+        All_transects_stdev.Save_as_pickle(Output_dir+'Marsh_metrics/',str(site)+'_stdev.pkl')
+
+        quit()
+
+        #All_transects.plot_property_stats(Output_dir+'Figures/', '17_PLOTTEST',-2)
+
+
+
+        # We now have transects.
+        # We shold plot them depending on their selectedness ^^
+        # Then we can extract some stuff.
+
+        quit()
+
+
+
         """Marsh = np.ones((50,60), dtype = np.float)
         from random import randint
 
@@ -152,54 +191,6 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Marsh[20:27, 41] = 0
         Marsh[2:7, 25:30] = 1
         Marsh[30:35, 0] = 0"""
-
-
-        # Here begins the actual MOA
-        print "\nRunning the analysis"
-
-        # STEP 1: Make the lines
-        #Make a proper object for the marsh
-        Marsh_object = Marsh_platform(Marsh.shape[0], Marsh.shape[1])
-        Marsh_object = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)
-        Marsh_DEM = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = False)
-        Marsh_labels = Marsh_object.label_connected (Nodata_value)
-
-        Marsh_labels.plot_map(Output_dir+'Figures/', '000_Test_marsh', 'Sous-fifre', Nodata_value)
-
-
-
-        Outlines = Marsh_labels.extract_outlines()
-
-        """Got rid of that to save time"""
-        Outlines.plot_on_basemap(Marsh_labels, Output_dir+'Figures/', '001_Test_lines', Nodata_value)
-        Outlines.save_to_shp (envidata_DEM, DEM, Output_dir+'Shapefiles/', site)
-
-        All_transects = Outlines.Polyline_transects(10,20, envidata_DEM, DEM, Output_dir, site)
-        All_transects = All_transects.get_attribute_from_basemap (20, DEM, 'Z', Nodata_value)
-        All_transects = All_transects.get_attribute_from_basemap (1, Marsh_object, 'Marsh', Nodata_value)
-
-        All_transects.plot_transects_on_basemap(Marsh_labels, Output_dir+'Figures/', '002_LINETEST', Nodata_value)
-
-
-
-
-        # You can faff with the directions later
-
-        All_transects_stats = All_transects.Polyline_stats()
-
-        All_transects.plot_property_stats(Output_dir+'Figures/', '17_PLOTTEST',-2)
-
-
-
-        # We now have transects.
-        # We shold plot them depending on their selectedness ^^
-        # Then we can extract some stuff.
-
-        quit()
-
-
-
-
 
 
 

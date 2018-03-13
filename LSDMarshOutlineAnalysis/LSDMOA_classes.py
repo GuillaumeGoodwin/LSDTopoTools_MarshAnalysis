@@ -12,7 +12,7 @@ import numpy as np
 #from osgeo import gdal, osr, gdalconst
 import matplotlib.pyplot as plt
 #from osgeo.gdalconst import *
-import cPickle
+import cPickle as pickle
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -424,6 +424,19 @@ class Transect (Line):
         self = self.reset_index(drop=True)
         return self
 
+    def slope_1D (self, scale = 1):
+        if self.size > 0:
+            dZ_list = []
+            step = max(self.index)+1
+            for i in range(0,len(self['rowcol']),step):
+                Start = i; End = i+step
+                dZ_list.append(0)
+                for j in range(1,step):
+                    dZ_list.append((self['Z'].iloc[Start+j] - self['Z'].iloc[Start+j-1])/scale)
+            self = self.add_attribute_list ('dZ', dZ_list)
+        return self
+
+
 
     def single_subdivide (self,sub_number):
         if len(self['rowcol']) == 2:
@@ -500,9 +513,10 @@ class Transect (Line):
             Mean = self[:step].copy(deep=True); Stdev = self[:step].copy(deep=True)
             for i in range(0,step):
                 Selected = self.loc[self['select'] == True].loc[i]
-                Mean['Z'].loc[i] = np.mean(Selected['Z'])
+                for attr_name in ['Z','dZ']:
+                    Mean[attr_name].loc[i] = np.mean(Selected[attr_name])
+                    Stdev[attr_name].loc[i] = np.std(Selected[attr_name])
                 Mean['length'].loc[i] = i; Mean['select'].loc[i] = True
-                Stdev['Z'].loc[i] = np.std(Selected['Z'])
                 Stdev['length'].loc[i] = i; Stdev['select'].loc[i] = True
         else:
             Mean = self.copy(deep=True); Stdev = self.copy(deep=True)
@@ -518,17 +532,9 @@ class Polyline (list):
         list.__init__(self)
 
 
-    def structure (self):
-        #This lists the types of objects in the polyline
-        Structure_list = [type(self)]
-        This_level = self[0]
-        for i in range(0,10):
-            Structure_list.append(type(This_level))
-            if type(This_level) is Point:
-                break
-            else:
-                This_level = This_level[0]
-        return Structure_list
+    def Save_as_pickle (self,filepath,filename):
+        with open(filepath+filename, 'wb') as handle:
+            pickle.dump(self,handle)
 
 
     def save_to_shp (self, Envidata, Enviarray, save_dir, site_name):
@@ -557,29 +563,10 @@ class Polyline (list):
                 self[i] = self[i].extract_values_from_basemap (basemap, attr_name, Nodata_value)
                 if attr_name == 'Z':
                     self[i] = self[i].orient_seaward()
+                    self[i] = self[i].slope_1D()
                 if attr_name == 'Marsh':
                     self[i] = self[i].select_transect(Nodata_value)
         return self
-
-
-
-    """def select_transects_from_property (self, condition):
-        Structure_list = self.structure()
-        if len(Structure_list) == 4 and Structure_list[-1] is Point:
-            for i in range(len(self)):
-                for j in range(len(self[i])):
-                    self[i][j].orient_seaward()
-                    self[i][j].select_line(condition)
-        elif len(Structure_list) == 5 and Structure_list[-1] is Point:
-            for h in range(len(self)):
-                    for i in range(len(self[h])):
-                        for j in range(len(self[h][i])):
-                            self[h][i][j].orient_seaward()
-                            self[h][i][j].select_line(condition)
-
-        return self"""
-
-
 
 
     def Polyline_stats (self):

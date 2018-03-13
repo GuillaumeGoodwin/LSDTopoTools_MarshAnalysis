@@ -1,76 +1,110 @@
 """
-Example_Plots.py
+LSDMOA_plots.py
 
+This file loads the inputs and outputs, then plots the MOA.
 
-    This contains wrapper functions that simplify plotting raster
-    and vector data for publication-ready figures.
+Please read the README and the instructions in this script before you run it.
 
-    Guillaume CH Goodwin, Simon Mudd and Fiona Clubb, June 2017
-    Released under GPL3
+Authors: Guillaume CH Goodwin and Simon Marius Mudd
 
 """
 
-
-"""#------------------------------------------------------------------
-#0. Set up display environment in putty if you are working on a terminal with no graphical interface.
+#------------------------------------------------------------------
+#0. Set up display environment if you are working on a terminal with no GUI.
 import matplotlib
 matplotlib.use('Agg')
 
-#----------------------------------------------------------------
-#1. Load useful Python packages
-import os
-import sys
+#------------------------------------------------------------------
 
+# Useful Python packages
 import numpy as np
-import functools
-import math as mt
-import cmath
-import scipy as sp
-import scipy.stats as stats
-from datetime import datetime
 import cPickle
-from pylab import *
-import functools
-import itertools as itt
-from osgeo import gdal, osr
-from osgeo import gdal, gdalconst
-from osgeo.gdalconst import *
-from copy import copy
-from matplotlib import cm
-import matplotlib.colors as colors
-import matplotlib.mlab as mlab
-import matplotlib.pyplot as plt
-import matplotlib.ticker as tk
-from matplotlib import rcParams
-from mpl_toolkits.axes_grid1.inset_locator import *
-import matplotlib.gridspec as gridspec
-from matplotlib.ticker import MultipleLocator, FormatStrFormatter
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from mpl_toolkits.basemap import Basemap, cm
-from matplotlib.patches import Rectangle
-import matplotlib.lines as mlines
-import matplotlib.patches as mpatches
 import timeit
-#------------------------------------------------------------------
-# Import the marsh-finding functions
-from LSDMOA_functions import *"""
+import os
+from random import randint
+import pandas as bb
 
-#------------------------------------------------------------------
-#2. Set up the important variables
-
-# Name your data input directory
-#Input_dir = "//csce.datastore.ed.ac.uk/csce/geos/users/s1563094/Software/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/"
-# Name your results output directory
-#Output_dir = "//csce.datastore.ed.ac.uk/csce/geos/users/s1563094/Software/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/"
-# NB: When naming your work directories, make sure the syntax is compatible with the OS you are using. Above is an example in the Windows command shell
+from LSDMOA_classes import *
+from LSDMOA_functions import *
 
 
 
-#Select site names. Simply add a site in the list to analyse multiple sites simultaneously.
-Sites = ["FEL"]
 
-# Set the value for empty DEM cells
-Nodata_value = -9999
+
+
+def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
+            Output_dir = "/Example_Data/Output/",
+            Site = ["FEL_DEM_clip"], opt1 = -2.0, opt2 = 0.85, opt3 = 8.0):
+    """
+    This function wraps all the marsh ID scripts in one location
+
+    Args:
+        Input_dir (str): Name your data input directory
+        Output_dir (str): Name your results output directory
+        Sites (str list): A list of strings. The file names are modified based on these sites
+        opt1 (flt): first optimisation
+        opt2 (flt): 2nd optimisation
+        opt3 (flt): 3rd optimisation
+        compare_with_digitised_marsh (bool): If true, this will compare the data with a digitised marsh platform
+
+    Author:
+        GCHG, Modified by SMM 02/10/2017
+    """
+    #------------------------------------------------------------------
+    # Timing the run
+    Start = timeit.default_timer()
+    print("\nWelcome to the MOA programme!\n")
+    print("I am opening the input files in: "+Input_dir)
+
+    # Set the value for empty DEM cells
+    Nodata_value = -1000
+
+
+
+    ######
+    #TEST ZONE STARTS
+    ######
+
+
+    ######
+    #TEST ZONE ENDS
+    ######
+
+
+
+
+    for site in Site:
+        print("Loading input data from site: "+site)
+        # NB: When loading input data, please make sure the naming convention shown here is respected.
+
+        print(" Loading DEM")
+        DEM_fname = site+"_DEM.bil"
+        DEM, post_DEM, envidata_DEM =  ENVI_raster_binary_to_2d_array (Input_dir+DEM_fname)
+        print DEM.shape
+
+        print " Loading Slopes"
+        # Make sure we have the right slope file name
+        slope_fname = site+"_slope.bil"
+        if not os.path.isfile(Input_dir+slope_fname):
+            slope_fname = site+"_SLOPE.bil"
+        Slope, post_Slope, envidata_Slope =  ENVI_raster_binary_to_2d_array (Input_dir+slope_fname)
+        print Slope.shape
+
+        print " Loading Curvature"
+        # Make sure we have the right slope file name
+        curv_fname = site+"_curv.bil"
+        if not os.path.isfile(Input_dir+curv_fname):
+            curv_fname = site+"_CURV.bil"
+        Curv, post_Curv, envidata_Curv =  ENVI_raster_binary_to_2d_array (Input_dir+curv_fname)
+        print Curv.shape
+
+        print " Loading Marsh Platform"
+        # Make sure we have the right slope file name
+        marsh_fname = site+"_Marsh.bil"
+        Marsh, post_Marsh, envidata_Marsh =  ENVI_raster_binary_to_2d_array (Input_dir+marsh_fname)
+        print Marsh.shape
+
+
 
 def Plot_platform_on_hillshade(Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
             Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",

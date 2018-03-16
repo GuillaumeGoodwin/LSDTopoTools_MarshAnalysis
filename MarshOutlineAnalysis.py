@@ -13,7 +13,10 @@ Authors: Guillaume CH Goodwin, Simon M. Mudd, University of Edinburgh
 # First import the mecessary modules
 import os
 import sys
+
 import LSDMarshOutlineAnalysis as MOA
+
+
 
 
 #=============================================================================
@@ -57,7 +60,7 @@ def main(argv):
     parser.add_argument("-site", "--site_name",type=str,default = "", help = "This is the prefix of the site files that selects the site for MOA. This file shoud be stored in the base directory. Default = no site")
 
     # Do you want to run the analysis?
-    parser.add_argument("-MOA", "--MarshOutlineAnalysis", type=bool, default=True, help="If this is true, I will run the MOA algorithm")
+    parser.add_argument("-MOA", "--MarshOutlineAnalysis", type=bool, default=False, help="If this is true, I will run the MOA algorithm")
 
     # Do you want plots?
     parser.add_argument("-Plots", "--MOA_plots", type=bool, default=False, help="If this is true I'll plot the results of MOA")
@@ -89,12 +92,11 @@ def main(argv):
 
     # make the plots depending on your choices
     if args.MOA_plots:
-        MOA.Plot_platform_on_hillshade(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
-        MOA.Plot_marsh_outline_on_hillshade(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
-        MOA.Plot_Elevation_PDF(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        #MOA.Plot_transects_hs_and_profiles(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        #MOA.Plot_all_site_stats(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        MOA.Plot_all_site_slopes(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
 
 
 #=============================================================================
 if __name__ == "__main__":
     main(sys.argv[1:])
-    

@@ -72,9 +72,11 @@ class Land_surface (np.ndarray):
         M_labels = range (int(np.amin(self[self>0])), int(np.amax(self[self>0]))+1, 1)
         Outlines = Polyline()
         for M in M_labels:
-            print '.... Label ', M
+            print '... Label ', M
             M_outlines = fct.Pandas_outline(self,M,1)
-            Outlines.append(M_outlines)
+            if M_outlines.size > 0:
+                print '.... Appending label'
+                Outlines.append(M_outlines)
         return Outlines
 
 
@@ -326,7 +328,10 @@ class Line (bb.DataFrame):
         """Only use after there are no more points to add"""
         if type(attr_list) is bool:
             self[str(attr_name)] = bb.Series(attr_list, index=self.index)
-        elif len(attr_list) == len(self['rowcol']):
+        elif type(attr_list) is list:
+            if len(attr_list) == len(self['rowcol']):
+                self[str(attr_name)] = bb.Series(attr_list, index=self.index)
+        elif type(attr_list) is np.float64:
             self[str(attr_name)] = bb.Series(attr_list, index=self.index)
         return self
 
@@ -341,7 +346,7 @@ class Line (bb.DataFrame):
 
 
     def Pandaline_to_shp (self, Envidata, Enviarray, save_dir, site_name):
-        value_range = range(min(self['L_code']),max(self['L_code']))
+        value_range = range(min(self['L_code']),max(self['L_code'])+1)
         for L in value_range:
             To_save = self.loc[self['L_code'] == L]
             M_code = To_save['M_code'][0]
@@ -355,9 +360,9 @@ class Line (bb.DataFrame):
         for i in range(len(self['rowcol'])):
             Line_row.append(self['rowcol'].iloc[i].row()); Line_col.append(self['rowcol'].iloc[i].col())
         if opaque == False:
-            Line = Line2D(Line_col, Line_row, color = plt.cm.gist_earth(50*colour), alpha = 0.3)
+            Line = Line2D(Line_col, Line_row, color = colour, alpha = 0.3)
         else:
-            Line = Line2D(Line_col, Line_row, color = plt.cm.gist_earth(50*colour), alpha = 1)
+            Line = Line2D(Line_col, Line_row, color = colour, alpha = 1)
         return Line
 
 
@@ -383,17 +388,29 @@ class Line (bb.DataFrame):
 
     def Line_transects (self, spacing, length, Envidata, Enviarray, save_dir, site_name):
         Transects = Transect()
-        value_range = range(min(self['L_code']),max(self['L_code']))
+        value_range = range(min(self['L_code']),max(self['L_code'])+1)
         for L in value_range:
             To_save = self.loc[self['L_code'] == L]
             M_code = To_save['M_code'][0]
             L_code = To_save['L_code'][0]
             in_name = str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'.shp'
             out_name = str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'_Tr.shp'
+
+            print in_name
+
             fct.Make_transects(save_dir+'Shapefiles/'+in_name, save_dir+'Shapefiles/'+out_name, spacing, length)
-            Trans = fct.Shp_to_transects (save_dir+"Shapefiles/", out_name, M_code, L_code, Envidata, Enviarray)
-            if Trans.size>0:
-                Transects = Transects.append(Trans)
+
+            os.system('rm '+save_dir+'Shapefiles/'+str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'.*')
+
+            if not os.path.isfile(save_dir+'Shapefiles/'+str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'_Tr.dbf'):
+                print 'Missed a transect in the saving procedure'
+            else:
+                Trans = fct.Shp_to_transects (save_dir+"Shapefiles/", out_name, M_code, L_code, Envidata, Enviarray)
+                if Trans.size>0:
+                    Transects = Transects.append(Trans)
+
+            os.system('rm '+save_dir+'Shapefiles/'+str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'_Tr.*')
+
         return Transects
 
 
@@ -405,6 +422,11 @@ class Transect (Line):
     @property
     def _constructor(self):
         return Transect
+
+
+    def Save_as_pickle (self,filepath,filename):
+        with open(filepath+filename, 'wb') as handle:
+            pickle.dump(self,handle)
 
 
     def assign_transect_code (self):
@@ -496,7 +518,7 @@ class Transect (Line):
                 elif min(Zeros[0])<max(Ones[0]):
                     for j in range(step):
                         Select_list.append(False)
-                elif min(self['Marsh'].iloc[Start:End]) == Nodata_value:
+                elif min(self['Z'].iloc[Start:End]) <= Nodata_value:
                     for j in range(step):
                         Select_list.append(False)
                 else:
@@ -512,12 +534,13 @@ class Transect (Line):
             step = max(self.index)+1
             Mean = self[:step].copy(deep=True); Stdev = self[:step].copy(deep=True)
             for i in range(0,step):
-                Selected = self.loc[self['select'] == True].loc[i]
-                for attr_name in ['Z','dZ']:
-                    Mean[attr_name].loc[i] = np.mean(Selected[attr_name])
-                    Stdev[attr_name].loc[i] = np.std(Selected[attr_name])
-                Mean['length'].loc[i] = i; Mean['select'].loc[i] = True
-                Stdev['length'].loc[i] = i; Stdev['select'].loc[i] = True
+                if len (self.loc[self['select'] == True]) > 0:
+                    Selected = self.loc[self['select'] == True].loc[i]
+                    for attr_name in ['Z','dZ']:
+                        Mean[attr_name].loc[i] = np.mean(Selected[attr_name])
+                        Stdev[attr_name].loc[i] = np.std(Selected[attr_name])
+                    Mean['length'].loc[i] = i; Mean['select'].loc[i] = True
+                    Stdev['length'].loc[i] = i; Stdev['select'].loc[i] = True
         else:
             Mean = self.copy(deep=True); Stdev = self.copy(deep=True)
         return Mean, Stdev
@@ -574,15 +597,119 @@ class Polyline (list):
         Stdev_polyline = Polyline()
         for i in range(len(self)):
             Transects = self[i]
+            if i == 0:
+                Bigtransect = Transects.copy(deep = True)
+            else:
+                Bigtransect = bb.concat([Bigtransect,Transects])
             Transects_mean,Transects_stdev = Transects.get_statistics()
             Mean_polyline.append(Transects_mean)
             Stdev_polyline.append(Transects_stdev)
-        return Mean_polyline, Stdev_polyline
+        Big_mean, Big_stdev = Bigtransect.get_statistics()
+        return Mean_polyline, Stdev_polyline, Big_mean, Big_stdev, Bigtransect
 
 
 
 
-    def plot_on_basemap(self,basemap, save_dir, figname, Nodata_value):
+    def plot_transects_basemap_and_profiles (self, basemap, mask, bg, save_dir, figname, Nodata_value):
+        twin  = basemap.copy()
+        twinmask  = mask.copy()
+
+        #Make the canvas
+        fig_height = min(np.floor(twin.shape[1])/5, 25)
+        fig_width = min(np.floor(twin.shape[1])/5, 10)
+        fig=plt.figure(figname, facecolor='White',figsize=[fig_height,fig_width])
+
+        ax1 = plt.subplot2grid((1,2),(0,0),colspan=1, rowspan=1)
+        ax1.tick_params(axis='x', colors='black')
+        ax1.tick_params(axis='y', colors='black')
+        plt.xlabel('x (m)', fontsize=18)
+        plt.ylabel('y (m)', fontsize=18)
+
+        ax1.annotate('a.', fontsize = 14,
+             xy=(0.95, 0.05),
+             xycoords='axes fraction',color='white')
+
+        # configure the basemap
+        Vmin = min(np.amin(twin[twin>Nodata_value])*0.95, np.amin(twin[twin>Nodata_value])*1.05)
+        Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
+        twinmask = np.ma.masked_where(twinmask == 1, twinmask)
+
+        Map = ax1.imshow(bg, interpolation='None', cmap=plt.cm.gray, vmin=0, vmax=210, alpha = 1.0)
+        Map = ax1.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+        Map = ax1.imshow(twinmask, interpolation='None', cmap= plt.cm.gray, vmin=Vmin, vmax=Vmax, alpha = 0.4)
+
+        ax2 = fig.add_axes([0.13, 0.98, 0.345, 0.02])
+        scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
+        cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
+        cb1.set_label('Elevation (m a.m.s.l.)', fontsize=18)
+
+
+        # Draw the lines, panda style
+        colour = 0
+        for i in range(len(self)):
+            Pandaline = self[i]
+            if Pandaline.size > 0:
+                colour+=1
+                L_labels = range (1,max(Pandaline['L_code'])+1)
+                for L in L_labels:
+                    Pandaline_slice = Pandaline.loc[Pandaline['L_code'] == L]
+                    #print Pandaline_slice
+                    if Pandaline_slice.size > 0:
+                        T_labels = range (1,max(Pandaline_slice['T_code'])+1)
+                        for T in T_labels:
+                            Pandaline_zest = Pandaline_slice.loc[Pandaline_slice['T_code'] == T]
+                            To_draw = Pandaline_zest.prepare_for_plotting(plt.cm.jet(colour*50),opaque = Pandaline_zest['select'].iloc[0])
+                            ax1.add_line(To_draw)
+
+
+
+        # Make the other plot
+        ax3 = plt.subplot2grid((1,2),(0,1),colspan=1, rowspan=1)
+        ax3.tick_params(axis='x', colors='black')
+        ax3.tick_params(axis='y', colors='black')
+        plt.ylabel('Elevation (m a.m.s.l.)', fontsize=18)
+        plt.xlabel('Transect length (m)', fontsize=18)
+
+        ax3.annotate('b.', fontsize = 14,
+             xy=(0.05, 0.05),
+             xycoords='axes fraction')
+
+        ax3.set_xlim(0,20)
+        #ax3.set_ylim(ymin=-2, ymax = 10)
+
+        colour = 0
+        for i in range(len(self)):
+            Pandaline = self[i]
+            if Pandaline.size > 0:
+                colour+=1
+                L_labels = range (1,max(Pandaline['L_code'])+1)
+                for L in L_labels:
+                    Pandaline_slice = Pandaline.loc[Pandaline['L_code'] == L]
+                    #print Pandaline_slice
+                    if Pandaline_slice.size > 0:
+                        T_labels = range (1,max(Pandaline_slice['T_code'])+1)
+                        for T in T_labels:
+                            Pandaline_zest = Pandaline_slice.loc[Pandaline_slice['T_code'] == T]
+                            if Pandaline_zest['select'].iloc[0] == True:
+                                ax3.plot(Pandaline_zest['Z'], color = plt.cm.jet(colour*50))
+
+        ax3.axvline(10, color='black', lw=1.0, alpha=0.8)
+
+        ax4 = fig.add_axes([0.55, 0.98, 0.345, 0.02])
+        scheme = plt.cm.jet; norm = colors.Normalize(vmin=0, vmax=colour)
+        cb2 = matplotlib.colorbar.ColorbarBase(ax4, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
+        cb2.set_label('Platform number', fontsize=18)
+
+        plt.savefig(save_dir+figname+'_Tr.png', bbox_inches='tight')
+
+
+
+
+
+
+
+
+    def plot_on_basemap(self,basemap, mask, save_dir, figname, Nodata_value):
         'Plotting on basemap'
         twin  = basemap.copy()
         #Make the canvas
@@ -812,40 +939,3 @@ class Polyline (list):
 
 
         return Outlines, Outlines_row, Outlines_col
-
-######################################################
-
-######################################################
-class Tidal_flat (np.ndarray):
-    def __new__ (Tidal_flat, x_length, y_length):
-        print 'In __new__ with class %s' % Tidal_flat
-        return np.ndarray.__new__(Tidal_flat, shape=(x_length, y_length), dtype =np.float)
-    def __init__ (self, x_length, y_length):
-        self.X_length = x_length
-        self.Y_length = y_length
-######################################################
-
-
-
-
-######################################################
-class Grid (np.ndarray):
-    def __new__ (Grid, x_length, y_length):
-        print 'In __new__ with class %s' % Grid
-        return np.ndarray.__new__(Grid, shape=(x_length, y_length), dtype =np.float)
-    def __init__ (self, x_length, y_length):
-        self.X_length = x_length
-        self.Y_length = y_length
-
-    def add_terrace (self, mudflat_width, mudflat_depth):
-        self [:, self.shape[1]-mudflat_width:] = self [:, self.shape[1]-mudflat_width:] + mudflat_depth
-        return self
-
-    def add_creek (self,creek,x_start):
-        y_start = self.shape[1] - creek.shape[1]
-        self[x_start:x_start+creek.shape[0], y_start:] = creek
-        return self
-
-    def add_patch (self, patch, x_start, y_start):
-        self[x_start:x_start+patch.shape[0], y_start:y_start+patch.shape[1]] =  self[x_start:x_start+patch.shape[0], y_start:y_start+patch.shape[1]] + patch
-        return self

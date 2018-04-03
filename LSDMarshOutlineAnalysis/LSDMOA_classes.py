@@ -360,9 +360,9 @@ class Line (bb.DataFrame):
         for i in range(len(self['rowcol'])):
             Line_row.append(self['rowcol'].iloc[i].row()); Line_col.append(self['rowcol'].iloc[i].col())
         if opaque == False:
-            Line = Line2D(Line_col, Line_row, color = colour, alpha = 0.3)
+            Line = Line2D(Line_col, Line_row, color = colour, alpha = 0.0)
         else:
-            Line = Line2D(Line_col, Line_row, color = colour, alpha = 1)
+            Line = Line2D(Line_col, Line_row, color = colour, alpha = 1, linewidth = 0.7)
         return Line
 
 
@@ -399,6 +399,13 @@ class Line (bb.DataFrame):
             print in_name
 
             fct.Make_transects(save_dir+'Shapefiles/'+in_name, save_dir+'Shapefiles/'+out_name, spacing, length)
+
+            print out_name
+
+
+            print
+
+
 
             os.system('rm '+save_dir+'Shapefiles/'+str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'.*')
 
@@ -446,11 +453,13 @@ class Transect (Line):
         self = self.reset_index(drop=True)
         return self
 
+
     def slope_1D (self, scale = 1):
         if self.size > 0:
             dZ_list = []
             step = max(self.index)+1
             for i in range(0,len(self['rowcol']),step):
+
                 Start = i; End = i+step
                 dZ_list.append(0)
                 for j in range(1,step):
@@ -458,6 +467,24 @@ class Transect (Line):
             self = self.add_attribute_list ('dZ', dZ_list)
         return self
 
+
+    def get_bearing (self):
+        if self.size > 0:
+            print self
+            bear_list = []
+            step = max(self.index)+1
+            for i in range(0,len(self['rowcol']),step):
+                Start = i; End = i+step-1
+                bear_list.append(0)
+                row = self['rowcol'].iloc[End][0]-self['rowcol'].iloc[Start][0]
+                col = self['rowcol'].iloc[End][1]-self['rowcol'].iloc[Start][1]
+                for j in range(1,step):
+                    bear = 90 - np.arctan2(row, col) * 180 / np.pi
+                    if bear < 0:
+                        bear = 360 + bear
+                    bear_list.append(bear)
+            self = self.add_attribute_list ('bear', bear_list)
+        return self
 
 
     def single_subdivide (self,sub_number):
@@ -587,6 +614,7 @@ class Polyline (list):
                 if attr_name == 'Z':
                     self[i] = self[i].orient_seaward()
                     self[i] = self[i].slope_1D()
+                    self[i] = self[i].get_bearing()
                 if attr_name == 'Marsh':
                     self[i] = self[i].select_transect(Nodata_value)
         return self

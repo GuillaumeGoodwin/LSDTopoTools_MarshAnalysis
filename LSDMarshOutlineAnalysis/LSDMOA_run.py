@@ -62,7 +62,7 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         # NB: When loading input data, please make sure the naming convention shown here is respected.
 
         print(" Loading DEM")
-        DEM_fname = site+"_DEM.bil"
+        DEM_fname = site+"_DEM_clip.bil"
         DEM, post_DEM, envidata_DEM =  ENVI_raster_binary_to_2d_array (Input_dir+DEM_fname)
         print DEM.shape
 
@@ -81,6 +81,11 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
         Marsh_object = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)
         Marsh_DEM = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = False)
         Marsh_labels = Marsh_object.label_connected (Nodata_value)
+
+        if not os.path.isdir(Output_dir):
+            os.system("mkdir "+Output_dir)
+            os.system("mkdir "+Output_dir+"Marsh_metrics/")
+            os.system("mkdir "+Output_dir+"Shapefiles/")
 
         if not os.path.isfile(Output_dir+'Marsh_metrics/'+str(site)+'_Out.pkl'):
             print 'Extracting outlines from array'

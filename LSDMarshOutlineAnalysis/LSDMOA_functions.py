@@ -316,6 +316,7 @@ def stitch_segments (segments, M_code, reset_length = False, select_longest = Tr
         M_outlines.append(M_outline)
 
         # update the L_code counter
+        print 'Processed Line:', L_code
         L_code+=1
 
     #This part is to group everything in one Pandas instead of a silly list
@@ -433,6 +434,7 @@ def Line_to_shp (line, Envidata, Enviarray, save_dir, file_name):
     poly = LineString(Coordinates)
     # Now convert it to a shapefile with OGR
     driver = ogr.GetDriverByName('Esri Shapefile')
+    print '%s/%s.shp' % (save_dir,file_name)
     ds = driver.CreateDataSource('%s/%s.shp' % (save_dir,file_name))
     #ds = driver.CreateDataSource(save_dir+str(label)+'_'+str(code)+'.shp')
     layer = ds.CreateLayer('', None, ogr.wkbLineString)
@@ -546,7 +548,16 @@ def Make_transects (in_shp, out_shp, spc, sect_len):
 
     # Open a new sink for the output features, using the same format driver
     # and coordinate reference system as the source.
+
+    #--config SHAPE_RESTORE_SHX true
+
+    print os.path.isfile(out_shp[:-3]+"shx")
+
+
     sink = collection(out_shp, "w", driver=source.driver, schema=schema, crs=source.crs)
+
+    print os.path.isfile(out_shp[:-3]+"shx")
+
 
     # Calculate the number of profiles to generate
     n_prof = int(line.length/spc)

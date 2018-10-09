@@ -345,14 +345,14 @@ class Line (bb.DataFrame):
         fct.Line_to_shp(self, Envidata, Enviarray, save_dir, file_name)
 
 
-    def Pandaline_to_shp (self, Envidata, Enviarray, save_dir, site_name):
+    def Pandaline_to_shp (self, Envidata, save_dir, site_name):
         value_range = range(min(self['L_code']),max(self['L_code'])+1)
         for L in value_range:
             To_save = self.loc[self['L_code'] == L]
             M_code = To_save['M_code'][0]
             L_code = To_save['L_code'][0]
             file_name = str(site_name)+'_'+str(M_code)+'_'+str(L_code)
-            fct.Line_to_shp(To_save, Envidata, Enviarray, save_dir, file_name)
+            fct.Line_to_shp(To_save, Envidata, save_dir, file_name)
 
 
     def prepare_for_plotting(self,colour,opaque = True):
@@ -396,16 +396,7 @@ class Line (bb.DataFrame):
             in_name = str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'.shp'
             out_name = str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'_Tr.shp'
 
-            print in_name
-
             fct.Make_transects(save_dir+'Shapefiles/'+in_name, save_dir+'Shapefiles/'+out_name, spacing, length)
-
-            print out_name
-
-
-            print
-
-
 
             os.system('rm '+save_dir+'Shapefiles/'+str(site_name)+'_'+str(M_code)+'_'+str(L_code)+'.*')
 
@@ -470,7 +461,7 @@ class Transect (Line):
 
     def get_bearing (self):
         if self.size > 0:
-            print self
+            #print self
             bear_list = []
             step = max(self.index)+1
             for i in range(0,len(self['rowcol']),step):
@@ -479,9 +470,9 @@ class Transect (Line):
                 row = self['rowcol'].iloc[End][0]-self['rowcol'].iloc[Start][0]
                 col = self['rowcol'].iloc[End][1]-self['rowcol'].iloc[Start][1]
                 for j in range(1,step):
-                    bear = 90 - np.arctan2(row, col) * 180 / np.pi
+                    bear = np.pi/2 + np.arctan2(row, col)# * 180 / np.pi
                     if bear < 0:
-                        bear = 360 + bear
+                        bear = bear + 2*np.pi + 360
                     bear_list.append(bear)
             self = self.add_attribute_list ('bear', bear_list)
         return self
@@ -531,7 +522,7 @@ class Transect (Line):
 
 
     def select_transect (self, Nodata_value):
-        """Only use if you already have a Marsh attribute"""
+        """Only use if you already have Marsh and Z attribute"""
         if self.size > 0:
             Select_list = []
             step = max(self.index)+1
@@ -539,6 +530,8 @@ class Transect (Line):
                 Start = i; End = i+step
                 Zeros = np.where(np.asarray(self['Marsh'].iloc[Start:End]) < 0.5)
                 Ones = np.where(np.asarray(self['Marsh'].iloc[Start:End]) > 0.5)
+                #print Ones
+                #print Zeros
                 if len(Zeros[0]) == 0 or len(Ones[0]) == 0:
                     for j in range(step):
                         Select_list.append(False)
@@ -551,6 +544,9 @@ class Transect (Line):
                 else:
                     for j in range(step):
                         Select_list.append(True)
+
+                #print Select_list
+                #quit()
             self.add_attribute_list ('select', Select_list)
         return self
 
@@ -574,6 +570,57 @@ class Transect (Line):
 
 
 
+    def squish(self, profile_length):
+
+        transect_len = profile_length
+        # Make a new transect object
+        Squished_self = Transect()
+
+        # Give it the columns you want
+        Squished_self['T_code'] = [1]
+        Squished_self['rowcol'] = [Point(1,1)]
+
+        content_ini = (1.,)
+        for x in range(transect_len):
+            content = content_ini + (x,)
+            content_ini = content
+        Squished_self['bearing'] = [1]
+
+        i = 1
+        for t in range(min(self['T_code']), max(self['T_code'])+1):
+            this_transect = self[self['T_code']==t]
+
+            code = this_transect['T_code'].values[0]
+
+            coord_start, coord_end = this_transect['rowcol'].values[0], this_transect['rowcol'].values[-1]
+            Z_list = tuple(this_transect['Z'].values)
+            dZ_list = tuple(this_transect['dZ'].values)
+            bearing = this_transect['bear'].values[1]
+            select = this_transect['select'].values[0]
+
+            element = bb.DataFrame({'T_code': [code,code], 'rowcol':[coord_start,coord_end], 'Z_dZ':[Z_list,dZ_list], 'bearing':[bearing,bearing], 'select':[select,select]})
+
+            top = Squished_self[0:i]; bottom = Squished_self[i:]
+            Squished_self=bb.concat((top,element,bottom))
+            Squished_self = Squished_self.reset_index(drop=True)
+
+            i+=2
+
+        Squished_self = Squished_self[1:]
+
+        return Squished_self
+
+
+
+    def save_to_fullshp(self, envidata, save_file):
+        fct.Transect_to_fullshp(self, envidata, save_file)
+
+
+
+
+
+
+
 ##########################################################################################################
 ##########################################################################################################
 class Polyline (list):
@@ -587,23 +634,40 @@ class Polyline (list):
             pickle.dump(self,handle)
 
 
-    def save_to_shp (self, Envidata, Enviarray, save_dir, site_name):
+    def save_to_shp (self, Envidata, save_dir, site_name, multiple = True):
+        if multiple is True:
+            for i in range(len(self)):
+                Outline = self[i]
+                Outline.Pandaline_to_shp(Envidata, save_dir, site_name)
+        else:
+            Outline = self
+            file_name = str(site_name)+'_MarshOutline'
+            fct.Polyline_to_shp (Outline, Envidata, Enviarray, save_dir, file_name)
+
+
+    def Transects_to_fullshp (self, envidata, save_file):
         for i in range(len(self)):
-            Outline = self[i]
-            Outline.Pandaline_to_shp(Envidata, Enviarray, save_dir, site_name)
+            self[i].save_to_fullshp(envidata, save_file)
 
 
-    def Polyline_transects (self, spacing, length, Envidata, Enviarray, save_dir, site_name, needs_saving = False):
+
+    def Polyline_transects (self, length, Envidata, Enviarray, save_dir, site_name, needs_saving = False):
         #if you haven't done so yet, save your polyline to a .shp
         if needs_saving is True:
             self.save_to_shp (Envidata, Enviarray, save_dir, site_name)
-        #Make a Polyline to store all those transects
-        All_transects = Polyline()
-        # For each Line in the Polyline
+
+        in_name = str(site_name)+'_MarshOutline.shp'
+        out_name = str(site_name)+'_OutlineProfiles.shp'
+
+        # Produce transects for the outline shapefiles
+        fct.Make_transects(save_dir+'Shapefiles/'+in_name, save_dir+'Shapefiles/'+out_name, spacing, length)
+
+
+    def squish_properties(self, profile_length):
+        # This one condenses the properties of a long pandas into a shorter pandas
         for i in range(len(self)):
-            Transects = self[i].Line_transects(spacing, length, Envidata, Enviarray, save_dir, site_name)
-            All_transects.append(Transects)
-        return All_transects
+            self[i] = self[i].squish(profile_length)
+        return self
 
 
     def get_attribute_from_basemap (self, refinement, basemap, attr_name, Nodata_value):
@@ -702,7 +766,7 @@ class Polyline (list):
              xy=(0.05, 0.05),
              xycoords='axes fraction')
 
-        ax3.set_xlim(0,20)
+        ax3.set_xlim(0,10)
         #ax3.set_ylim(ymin=-2, ymax = 10)
 
         colour = 0
@@ -721,7 +785,7 @@ class Polyline (list):
                             if Pandaline_zest['select'].iloc[0] == True:
                                 ax3.plot(Pandaline_zest['Z'], color = plt.cm.jet(colour*50))
 
-        ax3.axvline(10, color='black', lw=1.0, alpha=0.8)
+        ax3.axvline(5, color='black', lw=1.0, alpha=0.8)
 
         ax4 = fig.add_axes([0.55, 0.98, 0.345, 0.02])
         scheme = plt.cm.jet; norm = colors.Normalize(vmin=0, vmax=colour)

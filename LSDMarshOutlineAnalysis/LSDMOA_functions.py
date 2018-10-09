@@ -50,13 +50,14 @@ import scipy.ndimage as scim
 import cPickle as pickle
 
 
-from osgeo import ogr
+from osgeo import ogr, osr
 from shapely.geometry import LineString
 
 import fiona
 
 import pandas as bb
 
+import timeit
 
 import numpy as np
 from fiona import collection
@@ -65,6 +66,7 @@ from shapely.geometry import LineString, MultiLineString
 
 
 import LSDMOA_classes as cl
+
 
 
 ##########################################################################################################
@@ -275,14 +277,26 @@ def stitch_segments (segments, M_code, reset_length = False, select_longest = Tr
 
     #Initiate the objects
     segments[np.isnan(segments)] = 0
+
+    Original_seg_length = len(segments)
+
+
     L_code = 1
     # This is the list of outlines
     M_outlines = cl.Polyline()
 
     # loop until all the segments are stitched
     while np.amax(segments) != 0:
+    #while len(segments) >= 1:
+        #print 'These be the segments'
+        #print segments [:12]
+        #print len(segments)
+        #print
         # Setup the pandas outline
         M_outline = cl.Line()
+
+
+        #Start = timeit.default_timer()
 
         #Find the first non-null element in the array
         nonzero_x = np.where(segments[:,0]!=0)[0][0]
@@ -292,21 +306,52 @@ def stitch_segments (segments, M_code, reset_length = False, select_longest = Tr
         M_outline.set_first_point(M_code, L_code, segments[nonzero_y,1], segments[nonzero_x,0], 1)
         M_outline = M_outline.add_element(1,M_code, L_code, segments[nonzero_y+1,1], segments[nonzero_x+1,0])
 
+        segments = segments[3:]
+
         # Now stitch the connected segments together in both directions. Because we're 2D, bruv!
         for d in [-1,0]:
-            for i in range(3,len(segments),3):
+            for i in range(3,Original_seg_length,3):
                 # Find a segment that starts at the end of the previous segment
+
+                #print M_outline
+
                 last_point = M_outline['rowcol'].iloc[d]
                 find_next = np.where(np.logical_and(segments[:,1] == last_point.row(), segments[:,0] == last_point.col()))[0]
 
-                # Add the segment. Invert it if need be.
-                for j in range(len(find_next)):
-                    if find_next[j]/3. == find_next[j]//3:
-                        M_outline = M_outline.add_element(-d*len(M_outline['rowcol']),M_code, L_code, segments[find_next[j]+1,1], segments[find_next[j]+1,0])
-                        segments[find_next[j]:find_next[j]+3,:] = 0
-                    elif (find_next[j]-1)/3. == (find_next[j]-1)//3:
-                        M_outline = M_outline.add_element(-d*len(M_outline['rowcol']),M_code, L_code, segments[find_next[j]-1,1], segments[find_next[j]-1,0])
-                        segments[find_next[j]-1:find_next[j]+2,:] = 0
+                #print find_next
+
+                if len(find_next) > 0:
+
+                    # Add the segment. Invert it if need be.
+                    for j in range(len(find_next)):
+                        if find_next[j]/3. == find_next[j]//3:
+                            M_outline = M_outline.add_element(-d*len(M_outline['rowcol']),M_code, L_code, segments[find_next[j]+1,1], segments[find_next[j]+1,0])
+
+                            #print segments[find_next[j]:find_next[j]+3,:]
+
+                            #segments = np.delete(segments, np.s_[find_next[j]:find_next[j]+3], 0)
+                            segments[find_next[j]:find_next[j]+3,:] = 0
+
+                        elif (find_next[j]-1)/3. == (find_next[j]-1)//3:
+                            M_outline = M_outline.add_element(-d*len(M_outline['rowcol']),M_code, L_code, segments[find_next[j]-1,1], segments[find_next[j]-1,0])
+
+                            #print segments[find_next[j]-1:find_next[j]+2,:]
+
+                            #segments = np.delete(segments, np.s_[find_next[j]-1:find_next[j]+2], 0)
+                            segments[find_next[j]-1:find_next[j]+2,:] = 0
+
+                else:
+                    break
+
+            #print
+            #print M_outline
+
+            #Stop = timeit.default_timer()
+            #time = Stop - Start
+            #print 'runtime:', time
+            #quit()
+
+
 
         #Recalculate the distances to make it nicer. Takes a loooong time
         if reset_length is True:
@@ -317,6 +362,19 @@ def stitch_segments (segments, M_code, reset_length = False, select_longest = Tr
 
         # update the L_code counter
         print 'Processed Line:', L_code
+
+        #print 'These be the new segments'
+        #print segments
+        #print len(segments)
+        #print
+
+        #print M_outline
+        #Stop = timeit.default_timer()
+        #time = Stop - Start
+        #print 'runtime:', time
+        #quit()
+
+
         L_code+=1
 
     #This part is to group everything in one Pandas instead of a silly list
@@ -399,6 +457,75 @@ def Pandas_outline (Surface_array, M_code, scale):
 
 
 
+##########################################################################################################
+##########################################################################################################
+def Polyline_to_shp (line, Envidata, Enviarray, save_dir, file_name):
+    """
+    This function takes all these masses of wriggly lines and turns each of them into a shapefile. This is going to take a lot of space, so we should probably think of deleting the shapefiles when we're done with them.
+
+    Args:
+        Surface_array (2D numpy array): a 2-D array containing the surface to outline with the value 1. Undesirable elements have the value 0 or Nodata_value.
+        Outline_array (2D numpy array): a 2-D array destined to store the outline.
+        Outline_value (float): The value to be given to outline cells
+        Nodata_value (float): The value for empty cells
+
+    Returns:
+        Nothing. It just saves a bunch of shapefiles
+
+    Author: GCHG
+    """
+
+    X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
+    Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
+
+
+
+    spatialReference = osr.SpatialReference() #will create a spatial reference locally to tell the system what the reference will be
+    spatialReference.ImportFromProj4('+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +towgs84=375,-111,431,0,0,0,0 +units=m +no_defs') #here we define this reference to be utm Zone 48N with wgs84...
+
+    # Now convert it to a shapefile with OGR
+    driver = ogr.GetDriverByName('Esri Shapefile')
+    ds = driver.CreateDataSource('%s/%s.shp' % (save_dir,file_name))
+    layer = ds.CreateLayer('', spatialReference, ogr.wkbLineString)
+    # Add one attribute
+    layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
+    defn = layer.GetLayerDefn()
+
+
+    ## If there are multiple geometries, put the "for" loop here
+    #Coord_list = []
+    for subline in line:
+        x_offset,y_offset = 0,0
+
+        value_range = range(min(subline['L_code']),max(subline['L_code'])+1)
+        for L in value_range:
+            To_save = subline.loc[subline['L_code'] == L]
+
+            #Initiate list of coordinates
+            Coordinates = []
+            for i in range(len(To_save['rowcol'])):
+                x = To_save['rowcol'].iloc[i].col()
+                y = To_save['rowcol'].iloc[i].row()
+                coord_pair = (X_cell_width * x + X_origin + x_offset, Y_cell_width * y + Y_origin + y_offset)
+                Coordinates.append(coord_pair)
+
+            # Make a Shapely geometry
+            poly = LineString(Coordinates)
+
+            # Create a new feature (attribute and geometry)
+            feat = ogr.Feature(defn)
+            feat.SetField('id', 123)
+            # Make a geometry, from Shapely object
+            geom = ogr.CreateGeometryFromWkb(poly.wkb)
+            feat.SetGeometry(geom)
+            layer.CreateFeature(feat)
+    #feat = geom = None  # destroy these
+    # Save and close everything
+    ds = layer = feat = geom = None
+
+    print "file saved:" '%s/%s.shp' % (save_dir,file_name)
+
+
 
 
 
@@ -406,7 +533,164 @@ def Pandas_outline (Surface_array, M_code, scale):
 
 ##########################################################################################################
 ##########################################################################################################
-def Line_to_shp (line, Envidata, Enviarray, save_dir, file_name):
+def Transect_to_fullshp (line, Envidata, save_file):
+
+    X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
+    Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
+
+
+    spatialReference = osr.SpatialReference() #will create a spatial reference locally to tell the system what the reference will be
+    spatialReference.ImportFromProj4('+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +towgs84=375,-111,431,0,0,0,0 +units=m +no_defs') #here we define this reference to be utm Zone 48N with wgs84...
+
+    # Now convert it to a shapefile with OGR
+    driver = ogr.GetDriverByName('Esri Shapefile')
+    ds = driver.CreateDataSource(save_file)
+    layer = ds.CreateLayer('', spatialReference, ogr.wkbLineString)
+
+    # Add one attribute
+    layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
+    defn = layer.GetLayerDefn()
+
+    # Create an attribute per pandas column (except x/y)
+    for column in line.columns.values:
+        if column != 'rowcol' and column != 'Z_dZ':
+            Fielddef = ogr.FieldDefn(column, ogr.OFTReal)
+            layer.CreateField(Fielddef)
+            defn = layer.GetLayerDefn()
+
+        elif column == 'Z_dZ':
+            layer.CreateField(ogr.FieldDefn('Z', ogr.OFTString))
+            defn = layer.GetLayerDefn()
+            layer.CreateField(ogr.FieldDefn('dZ', ogr.OFTString))
+            defn = layer.GetLayerDefn()
+
+    # Now loop over the transect
+    T_range = range(min(line['T_code']),max(line['T_code'])+1)
+    for t in T_range:
+        To_save = line.loc[line['T_code'] == t]
+
+        #Initiate list of coordinates
+        Coordinates = []; x_offset,y_offset = 0,0
+        for i in range(len(To_save['rowcol'])):
+            #Fill in the coordinates
+            x = To_save['rowcol'].iloc[i].col()
+            y = To_save['rowcol'].iloc[i].row()
+            coord_pair = (X_cell_width * x + X_origin + x_offset, Y_cell_width * y + Y_origin + y_offset)
+            Coordinates.append(coord_pair)
+
+        # Make a Shapely geometry
+        poly = LineString(Coordinates)
+
+        # Create a new feature (attribute and geometry)
+        feat = ogr.Feature(defn)
+        feat.SetField('T_code', t)
+        feat.SetField('bearing', To_save['bearing'].iloc[0])
+        feat.SetField('Z', str(To_save['Z_dZ'].iloc[0]))
+        feat.SetField('dZ', str(To_save['Z_dZ'].iloc[1]))
+        feat.SetField('bearing', To_save['bearing'].iloc[0])
+        feat.SetField('select', To_save['select'].iloc[0])
+
+        # Make a geometry, from Shapely object
+        geom = ogr.CreateGeometryFromWkb(poly.wkb)
+        feat.SetGeometry(geom)
+        layer.CreateFeature(feat)
+
+
+    print "file saved: " + save_file
+
+
+
+
+
+##########################################################################################################
+##########################################################################################################
+def Shp_to_outline (file, Envidata):
+
+    # Load the file
+    shape = fiona.open(file)
+
+    # This s the environment of the raster
+    X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
+    Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
+
+    # initialise storage list
+    Lines = cl.Polyline()
+
+
+    for i in range(len(shape)):
+        print i
+        line = cl.Line()
+        line.set_first_point(0, 0, 0, 0)
+
+        attr = shape.next()
+        print attr
+        quit()
+        geometry = attr['geometry']
+        coordinates = geometry['coordinates']
+
+        Start_row = (coordinates[0][1]-Y_origin)/Y_cell_width
+        End_row = (coordinates[1][1]-Y_origin)/Y_cell_width
+        Start_col = (coordinates[0][0]-X_origin)/X_cell_width
+        End_col = (coordinates[1][0]-X_origin)/X_cell_width
+
+        line = line.add_element(len(line['rowcol']), 1, i, Start_row, Start_col)
+        line = line.add_element(len(line['rowcol']), 1, i, End_row, End_col)
+
+        line = line.iloc[1:]
+    #transect = transect.assign_transect_code()
+    Lines.append(line)
+
+
+    print Lines
+
+    quit()
+
+    return Lines
+
+
+
+
+
+##########################################################################################################
+##########################################################################################################
+def Many_Fullshp_to_fulltransects (file, Envidata):
+
+    # Load the file
+    shape = fiona.open(file)
+
+    # This s the environment of the raster
+    X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
+    Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
+
+    # initialise storage list
+    Transects = cl.Polyline()
+    transect = cl.Transect()
+    transect.set_first_point(0, 0, 0, 0)
+
+    for i in range(len(shape)):
+        attr = shape.next()
+        geometry = attr['geometry']
+        coordinates = geometry['coordinates']
+
+        Start_row = (coordinates[0][1]-Y_origin)/Y_cell_width
+        End_row = (coordinates[1][1]-Y_origin)/Y_cell_width
+        Start_col = (coordinates[0][0]-X_origin)/X_cell_width
+        End_col = (coordinates[1][0]-X_origin)/X_cell_width
+
+        transect = transect.add_element(len(transect['rowcol']), M_code, L_code, Start_row, Start_col)
+        transect = transect.add_element(len(transect['rowcol']), M_code, L_code, End_row, End_col)
+
+    transect = transect.iloc[1:]
+    transect = transect.assign_transect_code()
+    Transects.append(transect)
+
+    return Transects
+
+
+
+##########################################################################################################
+##########################################################################################################
+def Line_to_shp (line, Envidata, save_dir, file_name):
     """
     This function takes all these masses of riggly lines and turns each of them into a shapefile. This is going to take a lot of space, so we should probably think of deleting the shapefiles when we're done with them.
 
@@ -434,7 +718,6 @@ def Line_to_shp (line, Envidata, Enviarray, save_dir, file_name):
     poly = LineString(Coordinates)
     # Now convert it to a shapefile with OGR
     driver = ogr.GetDriverByName('Esri Shapefile')
-    print '%s/%s.shp' % (save_dir,file_name)
     ds = driver.CreateDataSource('%s/%s.shp' % (save_dir,file_name))
     #ds = driver.CreateDataSource(save_dir+str(label)+'_'+str(code)+'.shp')
     layer = ds.CreateLayer('', None, ogr.wkbLineString)
@@ -442,6 +725,7 @@ def Line_to_shp (line, Envidata, Enviarray, save_dir, file_name):
     layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
     defn = layer.GetLayerDefn()
     ## If there are multiple geometries, put the "for" loop here
+
     # Create a new feature (attribute and geometry)
     feat = ogr.Feature(defn)
     feat.SetField('id', 123)
@@ -458,25 +742,23 @@ def Line_to_shp (line, Envidata, Enviarray, save_dir, file_name):
 
 ##########################################################################################################
 ##########################################################################################################
-def Shp_to_transects (file_dir, file_name, M_code, L_code, Envidata, Enviarray):
+def Shp_to_transects (file, M_code, L_code, Envidata):
     """
-
     Args:
-
     Returns:
-
     Author: GCHG
     """
     # Load the file
-    shape = fiona.open(file_dir+file_name)
+    shape = fiona.open(file)
 
     # This s the environment of the raster
     X_origin = Envidata[0][0]; X_cell_width = Envidata[0][1]
     Y_origin = Envidata[0][3]; Y_cell_width = Envidata[0][5]
 
     # initialise storage list
-    Transects = cl.Transect()
-    Transects.set_first_point(0, 0, 0, 0)
+    Transects = cl.Polyline()
+    transect = cl.Transect()
+    transect.set_first_point(0, 0, 0, 0)
 
     for i in range(len(shape)):
         attr = shape.next()
@@ -488,11 +770,12 @@ def Shp_to_transects (file_dir, file_name, M_code, L_code, Envidata, Enviarray):
         Start_col = (coordinates[0][0]-X_origin)/X_cell_width
         End_col = (coordinates[1][0]-X_origin)/X_cell_width
 
-        Transects = Transects.add_element(len(Transects['rowcol']), M_code, L_code, Start_row, Start_col)
-        Transects = Transects.add_element(len(Transects['rowcol']), M_code, L_code, End_row, End_col)
+        transect = transect.add_element(len(transect['rowcol']), M_code, L_code, Start_row, Start_col)
+        transect = transect.add_element(len(transect['rowcol']), M_code, L_code, End_row, End_col)
 
-    Transects = Transects.iloc[1:]
-    Transects = Transects.assign_transect_code()
+    transect = transect.iloc[1:]
+    transect = transect.assign_transect_code()
+    Transects.append(transect)
 
     return Transects
 
@@ -503,12 +786,10 @@ def Make_transects (in_shp, out_shp, spc, sect_len):
     #-------------------------------------------------------------------------------
     # Name:        perp_lines.py
     # Purpose:     Generates multiple profile lines perpendicular to an input line
-    #
     # Author:      JamesS
-    #
     # Created:     13/02/2013
     #-------------------------------------------------------------------------------
-    """ Takes a shapefile containing a single line as input. Generates lines
+    """ Takes a shapefile containing a multiple lines as input. Generates lines
         perpendicular to the original with the specified length and spacing and
         writes them to a new shapefile.
 
@@ -520,13 +801,10 @@ def Make_transects (in_shp, out_shp, spc, sect_len):
 
     # Input shapefile. Must be a single, simple line, in projected co-ordinates
 
-
     # The shapefile to which the perpendicular lines will be written
-
 
     # Profile spacing. The distance at which to space the perpendicular profiles
     # In the same units as the original shapefile (e.g. metres)
-
 
     # Length of cross-sections to calculate either side of central line
     # i.e. the total length will be twice the value entered here.
@@ -538,8 +816,6 @@ def Make_transects (in_shp, out_shp, spc, sect_len):
 
     # Open the shapefile and get the data
     source = collection(in_shp, "r")
-    data = source.next()['geometry']
-    line = LineString(data['coordinates'])
 
     # Define a schema for the output features. Add a new field called 'Dist'
     # to uniquely identify each profile
@@ -548,59 +824,96 @@ def Make_transects (in_shp, out_shp, spc, sect_len):
 
     # Open a new sink for the output features, using the same format driver
     # and coordinate reference system as the source.
-
     #--config SHAPE_RESTORE_SHX true
-
-    print os.path.isfile(out_shp[:-3]+"shx")
-
-
     sink = collection(out_shp, "w", driver=source.driver, schema=schema, crs=source.crs)
 
-    print os.path.isfile(out_shp[:-3]+"shx")
+    for item in source.items():
+        data = item[1]['geometry']
+        line = LineString(data['coordinates'])
 
+        # Calculate the number of profiles to generate
+        n_prof = int(line.length/spc)
 
-    # Calculate the number of profiles to generate
-    n_prof = int(line.length/spc)
+        # Start iterating along the line
+        for prof in range(1, n_prof+1):
+            # Get the start, mid and end points for this segment
+            seg_st = line.interpolate((prof-1)*spc)
+            seg_mid = line.interpolate((prof-0.5)*spc)
+            seg_end = line.interpolate(prof*spc)
 
-    # Start iterating along the line
-    for prof in range(1, n_prof+1):
-        # Get the start, mid and end points for this segment
-        seg_st = line.interpolate((prof-1)*spc)
-        seg_mid = line.interpolate((prof-0.5)*spc)
-        seg_end = line.interpolate(prof*spc)
+            # Get a displacement vector for this segment
+            vec = np.array([[seg_end.x - seg_st.x,], [seg_end.y - seg_st.y,]])
 
-        # Get a displacement vector for this segment
-        vec = np.array([[seg_end.x - seg_st.x,], [seg_end.y - seg_st.y,]])
+            # Rotate the vector 90 deg clockwise and 90 deg counter clockwise
+            rot_anti = np.array([[0, -1], [1, 0]])
+            rot_clock = np.array([[0, 1], [-1, 0]])
+            vec_anti = np.dot(rot_anti, vec)
+            vec_clock = np.dot(rot_clock, vec)
 
-        # Rotate the vector 90 deg clockwise and 90 deg counter clockwise
-        rot_anti = np.array([[0, -1], [1, 0]])
-        rot_clock = np.array([[0, 1], [-1, 0]])
-        vec_anti = np.dot(rot_anti, vec)
-        vec_clock = np.dot(rot_clock, vec)
+            # Normalise the perpendicular vectors
+            len_anti = ((vec_anti**2).sum())**0.5
+            vec_anti = vec_anti/len_anti
+            len_clock = ((vec_clock**2).sum())**0.5
+            vec_clock = vec_clock/len_clock
 
-        # Normalise the perpendicular vectors
-        len_anti = ((vec_anti**2).sum())**0.5
-        vec_anti = vec_anti/len_anti
-        len_clock = ((vec_clock**2).sum())**0.5
-        vec_clock = vec_clock/len_clock
+            # Scale them up to the profile length
+            vec_anti = vec_anti*sect_len
+            vec_clock = vec_clock*sect_len
 
-        # Scale them up to the profile length
-        vec_anti = vec_anti*sect_len
-        vec_clock = vec_clock*sect_len
+            # Calculate displacements from midpoint
+            prof_st = (seg_mid.x + float(vec_anti[0]), seg_mid.y + float(vec_anti[1]))
+            prof_end = (seg_mid.x + float(vec_clock[0]), seg_mid.y + float(vec_clock[1]))
 
-        # Calculate displacements from midpoint
-        prof_st = (seg_mid.x + float(vec_anti[0]), seg_mid.y + float(vec_anti[1]))
-        prof_end = (seg_mid.x + float(vec_clock[0]), seg_mid.y + float(vec_clock[1]))
+            # Write to output
+            rec = {'geometry':{'type':'LineString', 'coordinates':(prof_st, prof_end)},
+                   'properties':{'Dist':(prof-0.5)*spc, u'id':0}}
 
-        # Write to output
-        rec = {'geometry':{'type':'LineString', 'coordinates':(prof_st, prof_end)},
-               'properties':{'Dist':(prof-0.5)*spc, u'id':0}}
+            sink.write(rec)
 
-        sink.write(rec)
-
-    # Tidy up
+            # Tidy up
     source.close()
     sink.close()
+
+
+
+
+
+
+
+
+
+
+
+################################################################################
+################################################################################
+def Profile_properties(profile_length, Transect_shp, Property_rasters_list, Nodata_value):
+
+    temp_array, post, envidata = ENVI_raster_binary_to_2d_array (Property_rasters_list[0])
+    #Transects = Shp_to_transects (Transect_shp, 1, 1, envidata)
+    Full_Transects = Shp_to_transects (Transect_shp, 1, 1, envidata)
+
+    for raster in Property_rasters_list:
+        # Load the raster and transects
+        array, post, envidata = ENVI_raster_binary_to_2d_array (raster)
+
+        # Apply different properties based on which raster you loaded
+        if raster.endswith('DEM_clip.bil'):
+            Full_Transects = Full_Transects.get_attribute_from_basemap (profile_length, array, 'Z', -9999.)
+        elif raster.endswith('Marsh.bil'):
+            Full_Transects = Full_Transects.get_attribute_from_basemap (1, array, 'Marsh', -9999.)
+
+    # Now squish the transects
+    Full_Transects = Full_Transects.squish_properties(profile_length)
+    # And save them to a shp
+    save_file = Transect_shp.replace('OutlineProfiles.shp','Full_profile.shp')
+    Full_Transects.Transects_to_fullshp(envidata, save_file)
+
+    print 'I have finished the full transects'
+
+    return Full_Transects
+
+
+
 
 
 

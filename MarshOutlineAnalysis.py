@@ -92,9 +92,20 @@ def main(argv):
 
     # make the plots depending on your choices
     if args.MOA_plots:
+        if not os.path.isdir(this_dir+'/Output/Figures/'):
+            os.system("mkdir " + this_dir + '/Output/Figures/')
         #MOA.Plot_transects_hs_and_profiles(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
         #MOA.Plot_all_site_stats(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
-        MOA.Plot_all_site_slopes(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        #MOA.Plot_all_site_slopes(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        #MOA.Plot_3MT(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+
+        #MOA.EGU_sitemap(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        #MOA.EGU_TIP_MOA(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        #MOA.EGU_pdf(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        #MOA.EGU_site_prop(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        MOA.EGU_masterplot(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        """MOA.Plot_EGU_Map(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)
+        MOA.Plot_EGU_Map(Input_dir = this_dir, Output_dir = this_dir+'/Output/Figures/', Site=site)"""
 
 
 #=============================================================================

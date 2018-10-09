@@ -31,7 +31,7 @@ from LSDMOA_functions import *
 
 def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
             Output_dir = "/Example_Data/Output/",
-            Site = ["FEL_DEM_clip"], opt1 = -2.0, opt2 = 0.85, opt3 = 8.0):
+            Site = ["FEL_DEM_clip"], profile_spacing = 10, profile_length = 10):
     """
     This function wraps all the marsh ID scripts in one location
 
@@ -54,53 +54,102 @@ def MarshOutlineAnalysis(Input_dir =  "/Example_Data/",
     print("I am opening the input files in: "+Input_dir)
 
     # Set the value for empty DEM cells
-    Nodata_value = -1000
+    Nodata_value = 0
 
 
     for site in Site:
-        print("Loading input data from site: "+site)
-        # NB: When loading input data, please make sure the naming convention shown here is respected.
 
-        print(" Loading DEM")
-        DEM_fname = site+"_DEM_clip.bil"
-        DEM, post_DEM, envidata_DEM =  ENVI_raster_binary_to_2d_array (Input_dir+DEM_fname)
-        print DEM.shape
+        # if the analysis is not done:
+        if not os.path.isfile(Input_dir+site+"_Full_profile.shp"):
 
-        print " Loading Marsh Platform"
-        # Make sure we have the right slope file name
-        marsh_fname = site+"_Marsh.bil"
-        Marsh, post_Marsh, envidata_Marsh =  ENVI_raster_binary_to_2d_array (Input_dir+marsh_fname)
-        print Marsh.shape
+            if os.path.isfile(Input_dir+site+"_Marsh.shp"):
 
+                print("Loading input data from site: "+site)
+                # NB: When loading input data, please make sure the naming convention shown here is respected.
 
+                print(" Loading DEM")
+                DEM_fname = site+"_DEM_clip.bil"
+                DEM, post_DEM, envidata_DEM =  ENVI_raster_binary_to_2d_array (Input_dir+DEM_fname)
+                print DEM.shape
 
-        # Here begins the actual MOA
-        print "\nProducing Lines"
-        #Make a proper object for the marsh
-        Marsh_object = Marsh_platform(Marsh.shape[0], Marsh.shape[1])
-        Marsh_object = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)
-        Marsh_DEM = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = False)
-        Marsh_labels = Marsh_object.label_connected (Nodata_value)
-
-        if not os.path.isdir(Output_dir):
-            os.system("mkdir "+Output_dir)
-            os.system("mkdir "+Output_dir+"Marsh_metrics/")
-            os.system("mkdir "+Output_dir+"Shapefiles/")
-
-        if not os.path.isfile(Output_dir+'Marsh_metrics/'+str(site)+'_Out.pkl'):
-            print 'Extracting outlines from array'
-            Outlines = Marsh_labels.extract_outlines()
-            Outlines.Save_as_pickle(Output_dir+'Marsh_metrics/',str(site)+'_Out.pkl')
-        else:
-            print 'Loading outlines from Pickle'
-            Outlines = pickle.load( open( Output_dir+'Marsh_metrics/'+str(site)+'_Out.pkl', "rb" ) )
-        Outlines.save_to_shp (envidata_DEM, DEM, Output_dir+'Shapefiles/', site)
+                print " Loading Marsh Platform"
+                # Make sure we have the right slope file name
+                marsh_fname = site+"_Marsh.bil"
+                Marsh, post_Marsh, envidata_Marsh =  ENVI_raster_binary_to_2d_array (Input_dir+marsh_fname)
+                print Marsh.shape
 
 
-        print "\nProducing Transects"
-        All_transects = Outlines.Polyline_transects(10,20, envidata_DEM, DEM, Output_dir, site)
+
+                # Here begins the actual MOA
+                #print "\nProducing Lines"
+                #Make a proper object for the marsh
+                #Marsh_object = Marsh_platform(Marsh.shape[0], Marsh.shape[1])
+                #Marsh_object = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)
+                #Marsh_DEM = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = False)
+                #Marsh_labels = Marsh_object.label_connected (Nodata_value)
+
+                #if not os.path.isdir(Output_dir):
+                #    os.system("mkdir "+Output_dir)
+                #    os.system("mkdir "+Output_dir+"Marsh_metrics/")
+                #    os.system("mkdir "+Output_dir+"Shapefiles/")
+
+                if os.path.isfile(Input_dir+str(site)+'_MarshOutline.shp'):
+                    if not os.path.isfile(Input_dir+site+'_OutlineProfiles.shp'):
+                        print "\nProducing Transects"
+                        in_name = site+'_MarshOutline.shp'
+                        out_name = site+'_OutlineProfiles.shp'
+
+                        fct.Make_transects(Input_dir+in_name, Input_dir+out_name, profile_spacing, profile_length)
+
+
+                    # Here a function to extract properties and save them to a shp file
+                    Full_transects = fct.Profile_properties(profile_length, Input_dir+site+'_OutlineProfiles.shp',[Input_dir+DEM_fname,Input_dir+marsh_fname], 0)
+
+                    print 'Removing unnecessary files'
+                    os.system('rm '+ Input_dir+str(site)+'_OutlineProfiles.*')
+                    os.system('rm '+ Input_dir+str(site)+'_Out.pkl')
+                    os.system('rm '+ Input_dir+str(site)+'_Scarps_C.*')
+
+                else:
+                    print 'You need to find a marsh outline, buddy!'
+                    quit()
+
+                #    print 'Extracting outlines from array'
+                #    Outlines = Marsh_labels.extract_outlines()
+                #    Outlines.Save_as_pickle(Input_dir+str(site)+'_Out.pkl')
+                #else:
+                #    print 'Loading outlines from Pickle'
+                #    Outlines = pickle.load( open(Input_dir+str(site)+'_Out.pkl', "rb" ) )
+                #Outlines.save_to_shp (envidata_DEM, DEM, Input_dir, site, multiple = False)
+
+
+
+
+
+            quit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         All_transects = All_transects.get_attribute_from_basemap (20, DEM, 'Z', Nodata_value)
         All_transects = All_transects.get_attribute_from_basemap (1, Marsh_object, 'Marsh', Nodata_value)
+        print All_transects
+        quit()
+
         All_transects_mean, All_transects_stdev, Big_mean, Big_stdev, Bigtransect = All_transects.Polyline_stats()
 
         print "\nSaving outputs"

@@ -28,6 +28,11 @@ from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 
 
+import plotly.plotly as py
+import plotly.graph_objs as go
+
+
+
 from LSDMOA_classes import *
 from LSDMOA_functions import *
 
@@ -44,128 +49,21 @@ def EGU_sitemap (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_
 
     """
 
-    figdir = Output_dir
+    Type = ["Open Coast", "Open-Sea Barrier", "Open Bay", "Lagoon", "Estuarine", "Estuarine Barrier", "Ria"]
 
-    forcing_dir = "/home/willgoodwin/Data/"
-    tide_dir = forcing_dir + "Tides/"
-    wave_dir = forcing_dir + "Waves/"
+    basedir = "/home/willgoodwin/Data/"
+    DEM_dir = basedir + "UK_LiDAR/"
+    fig_dir = basedir + "EGU_figs/"
+    outdir = Input_dir + 'Output/'
+    metricsdir = outdir + 'Marsh_metrics/'
 
-    Sites = [
-    "BTP1",
-    "BTP2",
-    "CRO2",
-    "CRO3",
-    "FLX1",
-    "FLX2",
-    "HIN1",
-    "MSY",
-    "SFT2",
-    "MCB",
-    "SWA1",
-    "SWA3",
-    "LYM1",
-    "LYM2",
-    "POO1",
-    "POO2",
-    "POO3",
-    "SOL",
-    "WSH4"]
+    tide_dir = basedir + "Tides/"
+    wave_dir = basedir + "Waves/"
 
-    # Change coord values
-    Coord_sites = [
-    (51.03,-4.10),
-    (51.04,-4.08),
-    (52.58,0.44),
-    (52.58,0.44),
-    (51.57,1.14),
-    (51.59,1.14),
-    (53.17,-2.49),
-    (53.24,0.11),
-    (54.8,-2.48),
-    (51.23,0.55),
-    (51.21,0.53),
-    (51.20,0.54),
-    (50.43,-1.32),
-    (50.44,-1.30),
-    (50.39,-1.58),
-    (50.40,-2.01),
-    (50.40,-2.00),
-    (50.49,-1.20),
-    (52.50,0.24)
-    ]
+    Sites = pickle.load( open(DEM_dir+'all_sites.pkl', "rb" ) )
+    site  = Input_dir[-6:-3] + Input_dir[-2]
 
-
-    Wave_sites = [
-    "Bdf",
-    "Bdf",
-    "BkO",
-    "BkO",
-    "Fxs",
-    "Fxs",
-    "Mhd",
-    "NBr",
-    "ChP",
-    "Clv",
-    "HBy",
-    "HBy",
-    "Lym",
-    "Lym",
-    "Bos",
-    "Bos",
-    "Bos",
-    "HgI",
-    "NWl"
-    ]
-
-
-    Tide_sites = [
-    "PtI",
-    "PtI",
-    "CRO",
-    "CRO",
-    "FEL",
-    "FEL",
-    "HIN",
-    "LIV",
-    "IMM",
-    "HEY",
-    "HBy",
-    "HBy",
-    "Lym",
-    "Lym",
-    "SwP",
-    "SwP",
-    "SwP",
-    "PTM",
-    "CRO"
-    ]
-
-    # Site types (allen, 2000): 1 = Estuary, 2 = Barrier, 3 = Open Bay, 4 = Lagoon, 5 = Open Sea
-    Type_sites = [
-    1,
-    1,
-    2,
-    2,
-    1,
-    1,
-    1,
-    1,
-    5,
-    3,
-    1,
-    1,
-    2,
-    5,
-    4,
-    4,
-    4,
-    1,
-    3
-    ]
-
-    print len(Type_sites)
-
-
+    Nodata_value = -1000
 
     fig_height = 25
     fig_width = 10
@@ -194,55 +92,78 @@ def EGU_sitemap (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_
     ax2 = plt.subplot2grid((1,2),(0,1),colspan=1, rowspan=1)
     ax2.tick_params(axis='x', colors='black')
     ax2.tick_params(axis='y', colors='black')
-    #plt.xlabel('lon (m)', fontsize=18)
-    #plt.ylabel('lat (m)', fontsize=18)
+    plt.xlabel('Spring tidal range (m)', fontsize=18)
+    plt.ylabel('Mean significant wave height (m)', fontsize=18)
 
 
     TR_list = []
     Hs_list = []
     i = 0
-    for site in Sites:
-        x, y = m(Coord_sites[i][1], Coord_sites[i][0])
-        Scatt = ax1.scatter(x,y, s = 20, c = plt.cm.jet(Type_sites[i]*50), alpha = 1.0)
+    for i in range(len(Sites)):
+        print Sites['Latlon'].iloc[i][1], Sites['Latlon'].iloc[i][0]
+        x, y = m(Sites['Latlon'].iloc[i][1], Sites['Latlon'].iloc[i][0])
+        print x, y
+        Scatt = ax1.scatter(x,y, s = 20, c = plt.cm.jet(Sites['Type'].iloc[i]*50), alpha = 1.0)
+        if (-1)**2 >0:
+            ax1.annotate(Sites['Region'].iloc[i], fontsize = 10, xy=(x+2000,y+25000*(-1)**(i/2)), xycoords='data',color='black')
+
 
         # Get spring Tidal range, defined here as q95 - q5
-        if os.path.isfile(tide_dir + Tide_sites[i] + "_Subsample.pkl"):
-            Tide = pickle.load( open(tide_dir + Tide_sites[i] + "_Subsample.pkl", "rb" ) )
-            TR_list.append (np.percentile(Tide[:,1], 95) - np.percentile(Tide[:,1], 5))
+        if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"):
+            Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl", "rb" ) )
+            Tha_tide = (Tide[:,1]).astype(np.float)
+            TR_list.append (np.percentile(Tha_tide, 95) - np.percentile(Tha_tide, 5))
+            print "opened tide file:", tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"
+
         else:
             for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003"]:
-                if os.path.isfile(tide_dir + Tide_sites[i] + "_tides" + year + ".pkl"):
-                    Tide = pickle.load( open(tide_dir + Tide_sites[i] + "_tides" + year + ".pkl", "rb" ) )
+                if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl"):
+                    Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl", "rb" ) )
                     Tide["Tide_OD"] = Tide["Tide_OD"].astype(np.float)
                     Tide = Tide.loc[Tide["Tide_OD"] < 999]
-                    TR_list.append (np.percentile(Tide["Tide_OD"], 95) - np.percentile(Tide["Tide_OD"], 5))
+                    Tha_tide = Tide["Tide_OD"]
+                    Tha_tide =np.asarray(Tha_tide[Tha_tide > Nodata_value])
+                    TR_list.append (np.percentile(Tha_tide, 95) - np.percentile(Tha_tide, 5))
+                    print "opened tide file:", tide_dir + Sites['Tides'][i] + "_tides" + year + ".pkl"
                     break
+
+
+            else:
+                print "I didnt find a file to open"
+                quit()
 
         # Get mean Hs
         print site
         for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003","201408","201409","201410","201411"]:
-            if os.path.isfile(wave_dir + Wave_sites[i] + "_waves" + year + ".pkl"):
-                print wave_dir + Wave_sites[i] + "_waves" + year + ".pkl"
-                Wave = pickle.load( open(wave_dir + Wave_sites[i] + "_waves" + year + ".pkl", "rb" ) )
+            if os.path.isfile(wave_dir + Sites['Waves'].iloc[i] + "_waves" + year + ".pkl"):
+                print wave_dir + Sites['Waves'].iloc[i]  + "_waves" + year + ".pkl"
+                Wave = pickle.load( open(wave_dir + Sites['Waves'].iloc[i] + "_waves" + year + ".pkl", "rb" ) )
                 Wave["Hs"] = Wave["Hs"].astype(np.float)
                 Hs_list.append (np.mean(Wave["Hs"]))
                 break
 
-        Scatt2 = ax2.scatter(TR_list[i],Hs_list[i], c = plt.cm.jet(Type_sites[i]*50))
+        Scatt2 = ax2.scatter(TR_list[i],Hs_list[i], c = plt.cm.jet(Sites['Type'].iloc[i]*50))
+        ax2.annotate(Sites['Region'].iloc[i], fontsize = 14, xy=(TR_list[i],Hs_list[i]+0.02), xycoords='data',color='black')
+
+        ax2.annotate(Type[Sites['Type'].iloc[i]-1], fontsize = 14,
+             xy=(0.05, 0.25-(Sites['Type'].iloc[i]-1)/20.),
+             xycoords='axes fraction',color=plt.cm.jet(Sites['Type'].iloc[i]*50))
+
 
         i+=1
 
 
 
-    plt.savefig(figdir+'_EGU_map.png', bbox_inches='tight')
-    print 'Figure saved:' + figdir + '_EGU_map.png'
+
+    plt.savefig(fig_dir+'_EGU_map.png', bbox_inches='tight')
+    print 'Figure saved:' + fig_dir + '_EGU_map.png'
 
 
 
     """Sort out titles and overlapping points and point coordinates"""
 
 
-
+    """AAAHHHH Sort out Lymongton TR"""
 
 
 
@@ -261,137 +182,141 @@ def EGU_TIP_MOA (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_
             Site = ["FEL"]):
 
 
+    basedir = "/home/willgoodwin/Data/"
+    DEM_dir = basedir + "UK_LiDAR/"
+    fig_dir = basedir + "EGU_figs/"
+    outdir = Input_dir + 'Output/'
+    metricsdir = outdir + 'Marsh_metrics/'
+
+    Sites = pickle.load( open(DEM_dir+'all_sites.pkl', "rb" ) )
+    site  = Input_dir[-6:-3] + Input_dir[-2]
+
+
+
+
+
     #Plot 1: Draw the platform on a DEM, superimposed on a hillshade
-    for site in Site:
+    Nodata_value = -1000
 
-        Nodata_value = -1000
+    print(" Loading DEM")
+    DEM_fname = site+"_DEM_clip.bil"
+    DEM, post_DEM, envidata_DEM =  fct.ENVI_raster_binary_to_2d_array (Input_dir+DEM_fname)
 
-        basedir = Input_dir
-        outdir = basedir + 'Output/'
+    print " Loading Marsh Platform"
+    marsh_fname = site+"_Marsh.bil"
+    Marsh, post_Marsh, envidata_Marsh =  fct.ENVI_raster_binary_to_2d_array (Input_dir+marsh_fname)
 
-        tidedir = basedir + 'Tide/'
-        figdir = outdir + 'Figures/'
-        metricsdir = outdir + 'Marsh_metrics/'
+    print " Loading Hillshade"
+    hs_fname = site+"_hs_clip.bil"
+    hs, post_hs, envidata_hs =  ENVI_raster_binary_to_2d_array (Input_dir+hs_fname)
 
-
-        print(" Loading DEM")
-        DEM_fname = site+"_DEM_clip.bil"
-        DEM, post_DEM, envidata_DEM =  fct.ENVI_raster_binary_to_2d_array (basedir+DEM_fname)
-
-        print " Loading Marsh Platform"
-        # Make sure we have the right slope file name
-        marsh_fname = site+"_Marsh.bil"
-        Marsh, post_Marsh, envidata_Marsh =  fct.ENVI_raster_binary_to_2d_array (basedir+marsh_fname)
-
-        print " Loading Hillshade"
-                # Make sure we have the right slope file name
-        hs_fname = site+"_hs_clip.bil"
-        hs, post_hs, envidata_hs =  ENVI_raster_binary_to_2d_array (Input_dir+hs_fname)
-
-        Marsh_object = Marsh_platform(Marsh.shape[0], Marsh.shape[1])
-        Marsh_object = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)
-        Marsh_DEM = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = False)
-        Marsh_labels = Marsh_object.label_connected (Nodata_value)
+    Marsh_object = Marsh_platform(Marsh.shape[0], Marsh.shape[1])
+    Marsh_object = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = True)
+    Marsh_DEM = Marsh_object.set_attribute (Marsh, 1, DEM, Nodata_value, classification = False)
+    Marsh_labels = Marsh_object.label_connected (Nodata_value)
 
 
-        print 'Loading outlines from Pickle'
-        Outlines = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_Out.pkl', "rb" ) )
+    print 'Loading outlines from Pickle'
+    Outlines = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_Out.pkl', "rb" ) )
 
-        print 'Loading transects from Pickle'
-        Transects = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_Tr.pkl', "rb" ) )
-        Transects_mean = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_mean.pkl', "rb" ) )
-        Transects_stdev = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_stdev.pkl', "rb" ) )
+    print 'Loading transects from Pickle'
+    Transects = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_Tr.pkl', "rb" ) )
 
+    twin = DEM.copy()
+    twinmask = Marsh_object.copy()
 
-        #Transects.plot_transects_basemap_and_profiles(DEM, Marsh_object, hs, figdir, site + '_combined', Nodata_value)
-
-        twin = DEM.copy()
-        twinmask = Marsh_object.copy()
-
-        fig_height = min(np.floor(twin.shape[1])/5, 25)
-        fig_width = min(np.floor(twin.shape[1])/5, 10)
-        fig=plt.figure('figname', facecolor='White',figsize=[fig_height,fig_width])
-
-        ax1 = plt.subplot2grid((3,1),(0,0),colspan=1, rowspan=1)
-        ax1.tick_params(axis='x', colors='black')
-        ax1.tick_params(axis='y', colors='black')
-        #plt.xlabel('x (m)', fontsize=18)
-        plt.ylabel('y (m)', fontsize=18)
-        #ax1.set_xticks([])
-        ax1.annotate('a.', fontsize = 14,
-             xy=(0.95, 0.05),
-             xycoords='axes fraction',color='white')
-
-        # configure the basemap
-        Vmin = min(np.amin(twin[twin>Nodata_value])*0.95, np.amin(twin[twin>Nodata_value])*1.05)
-        Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
-        twinmask = np.ma.masked_where(twinmask == 1, twinmask)
-
-        Map = ax1.imshow(hs, interpolation='None', cmap=plt.cm.gray, vmin=0, vmax=210, alpha = 1.0)
-        Map = ax1.imshow(DEM, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
-
-        """ax2 = fig.add_axes([0.13, 0.98, 0.345, 0.02])
-        scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
-        cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='horizontal', alpha = 0.6)
-        cb1.set_label('Elevation (m a.m.s.l.)', fontsize=18)"""
-
-        ax3 = plt.subplot2grid((3,1),(1,0),colspan=1, rowspan=1)
-        ax3.tick_params(axis='x', colors='black')
-        ax3.tick_params(axis='y', colors='black')
-        #plt.xlabel('x (m)', fontsize=18)
-        plt.ylabel('y (m)', fontsize=18)
-        ax3.annotate('b.', fontsize = 14,
-             xy=(0.95, 0.05),
-             xycoords='axes fraction',color='white')
-
-        # configure the basemap
-        Vmin = min(np.amin(twin[twin>Nodata_value])*0.95, np.amin(twin[twin>Nodata_value])*1.05)
-        Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
-        twinmask = np.ma.masked_where(twinmask == 1, twinmask)
-
-        Map = ax3.imshow(hs, interpolation='None', cmap=plt.cm.gray, vmin=0, vmax=210, alpha = 1.0)
-        Map = ax3.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
-        Map = ax3.imshow(twinmask, interpolation='None', cmap= plt.cm.gray, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+    fig_width = min(np.floor(twin.shape[1])/5, 15)
+    fig_height = min(np.floor(twin.shape[1])/5, 40)
+    fig=plt.figure('figname', facecolor='White',figsize=[fig_height,fig_width])
 
 
-        ax4 = plt.subplot2grid((3,1),(2,0),colspan=1, rowspan=1)
-        ax4.tick_params(axis='x', colors='black')
-        ax4.tick_params(axis='y', colors='black')
-        plt.xlabel('x (m)', fontsize=18)
-        plt.ylabel('y (m)', fontsize=18)
-        ax4.annotate('c.', fontsize = 14,
-             xy=(0.95, 0.05),
-             xycoords='axes fraction',color='white')
 
-        # configure the basemap
-        Vmin = min(np.amin(twin[twin>Nodata_value])*0.95, np.amin(twin[twin>Nodata_value])*1.05)
-        Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
-        twinmask = np.ma.masked_where(twinmask == 1, twinmask)
+    ax1 = plt.subplot2grid((1,16),(0,0),colspan=5, rowspan=1)
+    ax1.tick_params(axis='x', colors='black')
+    ax1.tick_params(axis='y', colors='black')
+    #plt.xlabel('x (m)', fontsize=18)
+    #plt.ylabel('y (m)', fontsize=18)
+    #
+    ax1.annotate('a.', fontsize = 14,
+         xy=(0.95, 0.05),
+         xycoords='axes fraction',color='white')
 
-        Map = ax4.imshow(hs, interpolation='None', cmap=plt.cm.gray, vmin=0, vmax=210, alpha = 1.0)
-        Map = ax4.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
-        Map = ax4.imshow(twinmask, interpolation='None', cmap= plt.cm.gray, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+    # configure the basemap
+    Vmin = min(np.amin(twin[twin>Nodata_value])*0.95, np.amin(twin[twin>Nodata_value])*1.05)
+    Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
+    twinmask = np.ma.masked_where(twinmask == 1, twinmask)
 
-
-        # Draw the lines, panda style
-        colour = 0
-        for i in range(len(Transects)):
-            Pandaline = Transects[i]
-            if Pandaline.size > 0:
-                colour+=1
-                L_labels = range (1,max(Pandaline['L_code'])+1)
-                for L in L_labels:
-                    Pandaline_slice = Pandaline.loc[Pandaline['L_code'] == L]
-                    #print Pandaline_slice
-                    if Pandaline_slice.size > 0:
-                        T_labels = range (1,max(Pandaline_slice['T_code'])+1)
-                        for T in T_labels:
-                            Pandaline_zest = Pandaline_slice.loc[Pandaline_slice['T_code'] == T]
-                            To_draw = Pandaline_zest.prepare_for_plotting(plt.cm.gray(0),opaque = Pandaline_zest['select'].iloc[0])
-                            ax4.add_line(To_draw)
+    Map = ax1.imshow(hs, interpolation='None', cmap=plt.cm.gray, vmin=0, vmax=210, alpha = 1.0)
+    Map = ax1.imshow(DEM, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
 
 
-        plt.savefig(figdir+site+'_TIP_MOA.png', bbox_inches='tight')
+
+    ax3 = plt.subplot2grid((1,16),(0,5),colspan=5, rowspan=1)
+    ax3.tick_params(axis='x', colors='black')
+    ax3.tick_params(axis='y', colors='black')
+    ax3.set_yticks([])
+    #plt.xlabel('x (m)', fontsize=18)
+    #plt.ylabel('y (m)', fontsize=18)
+    ax3.annotate('b.', fontsize = 14,
+         xy=(0.95, 0.05),
+         xycoords='axes fraction',color='white')
+
+    # configure the basemap
+    Vmin = min(np.amin(twin[twin>Nodata_value])*0.95, np.amin(twin[twin>Nodata_value])*1.05)
+    Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
+    twinmask = np.ma.masked_where(twinmask == 1, twinmask)
+
+    Map = ax3.imshow(hs, interpolation='None', cmap=plt.cm.gray, vmin=0, vmax=210, alpha = 1.0)
+    Map = ax3.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+    Map = ax3.imshow(twinmask, interpolation='None', cmap= plt.cm.gray, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+
+
+    ax4 = plt.subplot2grid((1,16),(0,10),colspan=5, rowspan=1)
+    ax4.tick_params(axis='x', colors='black')
+    ax4.tick_params(axis='y', colors='black')
+    ax4.set_yticks([])
+    #plt.xlabel('x (m)', fontsize=18)
+    #plt.ylabel('y (m)', fontsize=18)
+    ax4.annotate('c.', fontsize = 14,
+         xy=(0.95, 0.05),
+         xycoords='axes fraction',color='white')
+
+    # configure the basemap
+    Vmin = min(np.amin(twin[twin>Nodata_value])*0.95, np.amin(twin[twin>Nodata_value])*1.05)
+    Vmax = max(np.amax(twin)*0.95, np.amax(twin)*1.05)
+    twinmask = np.ma.masked_where(twinmask == 1, twinmask)
+
+    Map = ax4.imshow(hs, interpolation='None', cmap=plt.cm.gray, vmin=0, vmax=210, alpha = 1.0)
+    Map = ax4.imshow(twin, interpolation='None', cmap=plt.cm.gist_earth, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+    Map = ax4.imshow(twinmask, interpolation='None', cmap= plt.cm.gray, vmin=Vmin, vmax=Vmax, alpha = 0.6)
+
+
+    # Draw the lines, panda style
+    colour = 0
+    for i in range(len(Transects)):
+        Pandaline = Transects[i]
+        if Pandaline.size > 0:
+            colour+=1
+            L_labels = range (1,max(Pandaline['L_code'])+1)
+            for L in L_labels:
+                Pandaline_slice = Pandaline.loc[Pandaline['L_code'] == L]
+                #print Pandaline_slice
+                if Pandaline_slice.size > 0:
+                    T_labels = range (1,max(Pandaline_slice['T_code'])+1)
+                    for T in T_labels:
+                        Pandaline_zest = Pandaline_slice.loc[Pandaline_slice['T_code'] == T]
+                        To_draw = Pandaline_zest.prepare_for_plotting(plt.cm.gray(0),opaque = Pandaline_zest['select'].iloc[0])
+                        ax4.add_line(To_draw)
+
+
+    ax2 = plt.subplot2grid((1,16),(0,15),colspan=1, rowspan=1)
+    scheme = plt.cm.gist_earth; norm = colors.Normalize(vmin=Vmin, vmax=Vmax)
+    cb1 = matplotlib.colorbar.ColorbarBase(ax2, cmap=scheme, norm=norm, orientation='vertical', alpha = 0.6)
+    cb1.set_label('Elevation (m a.m.s.l.)', fontsize=18)
+
+
+
+    plt.savefig(fig_dir + site + '_TIP_MOA.png', bbox_inches='tight')
 
 
 
@@ -419,158 +344,47 @@ def EGU_pdf (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data
             Site = ["FEL"]):
 
 
+    basedir = "/home/willgoodwin/Data/"
+    DEM_dir = basedir + "UK_LiDAR/"
+    fig_dir = basedir + "EGU_figs/"
+    outdir = Input_dir + 'Output/'
+    metricsdir = outdir + 'Marsh_metrics/'
 
-    figdir = Output_dir
+    tide_dir = basedir + "Tides/"
 
-    forcing_dir = "/home/willgoodwin/Data/"
-    tide_dir = forcing_dir + "Tides/"
-    wave_dir = forcing_dir + "Waves/"
+    Sites = pickle.load( open(DEM_dir+'all_sites.pkl', "rb" ) )
 
-    Sites = [
-    "BTP1",
-    "BTP2",
-    "CRO2",
-    "CRO3",
-    "FLX1",
-    "FLX2",
-    "HIN1",
-    "MSY",
-    "SFT2",
-    "MCB",
-    "SWA1",
-    "SWA3",
-    "LYM1",
-    "LYM2",
-    "POO1",
-    "POO2",
-    "POO3",
-    "SOL",
-    "WSH4"]
+    Nodata_value = -1000
 
-    # Change coord values
-    Coord_sites = [
-    (51.03,-4.10),
-    (51.04,-4.08),
-    (52.58,0.44),
-    (52.58,0.44),
-    (51.57,1.14),
-    (51.59,1.14),
-    (53.17,-2.49),
-    (53.24,0.11),
-    (54.8,-2.48),
-    (51.23,0.55),
-    (51.21,0.53),
-    (51.20,0.54),
-    (50.43,-1.32),
-    (50.44,-1.30),
-    (50.39,-1.58),
-    (50.40,-2.01),
-    (50.40,-2.00),
-    (50.49,-1.20),
-    (52.50,0.24)
-    ]
-
-
-    Wave_sites = [
-    "Bdf",
-    "Bdf",
-    "BkO",
-    "BkO",
-    "Fxs",
-    "Fxs",
-    "Mhd",
-    "NBr",
-    "ChP",
-    "Clv",
-    "HBy",
-    "HBy",
-    "Lym",
-    "Lym",
-    "Bos",
-    "Bos",
-    "Bos",
-    "HgI",
-    "NWl"
-    ]
-
-
-    Tide_sites = [
-    "PtI",
-    "PtI",
-    "CRO",
-    "CRO",
-    "FEL",
-    "FEL",
-    "HIN",
-    "LIV",
-    "IMM",
-    "HEY",
-    "HBy",
-    "HBy",
-    "Lym",
-    "Lym",
-    "SwP",
-    "SwP",
-    "SwP",
-    "PTM",
-    "CRO"
-    ]
-
-    # Site types (allen, 2000): 1 = Estuary, 2 = Barrier, 3 = Open Bay, 4 = Lagoon, 5 = Open Sea
-    Type_sites = [
-    1,
-    1,
-    2,
-    2,
-    1,
-    1,
-    1,
-    1,
-    5,
-    3,
-    1,
-    1,
-    2,
-    5,
-    4,
-    4,
-    4,
-    1,
-    3
-    ]
-
-
-
-    fig_height = 25
-    fig_width = 10
-    fig=plt.figure('figname', facecolor='White',figsize=[fig_height,fig_width])
+    fig_width = 55
+    fig_height = 12
+    fig=plt.figure('figname', facecolor='White',figsize=[fig_width,fig_height])
 
     ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=1)
     ax1.tick_params(axis='x', colors='black')
     ax1.tick_params(axis='y', colors='black')
-    #plt.xlabel('lon (m)', fontsize=18)
-    #plt.ylabel('lat (m)', fontsize=18)
+    plt.xlabel('Site', fontsize=22)
+    plt.ylabel('Elevation (m)', fontsize=22)
+
+    ax2 = ax1.twinx()
+    ax2.tick_params(axis='x', colors='black')
+    ax2.tick_params(axis='y', colors='black')
+    #plt.xlabel('Site', fontsize=18)
+    plt.ylabel('RSLR (mm/yr)', fontsize=22)
+
 
     i = 0
+    x_labels = [0,0]
+    RSLR = []
+    for i in range(len(Sites)):
 
-    for site in Sites:
+        x_labels.append(Sites['Region'].iloc[i]+str(Sites['Site'].iloc[i]))
 
-        Nodata_value = -1000
+        DEM_fname = Sites['Region'].iloc[i] + str(Sites['Site'].iloc[i]) + "_DEM_clip.bil"
+        DEM, post_DEM, envidata_DEM =  fct.ENVI_raster_binary_to_2d_array (DEM_dir + Sites['Region'].iloc[i] + '/' + str(Sites['Site'].iloc[i]) + '/' + DEM_fname)
 
-        basedir = "/home/willgoodwin/Data/EA_LiDAR/" + Sites[i] + "/"
-        outdir = basedir + 'Output/'
-        #figdir = outdir + 'Figures/'
-        metricsdir = outdir + 'Marsh_metrics/'
-
-        print(" Loading DEM")
-        DEM_fname = Sites[i] + "_DEM_clip.bil"
-        print DEM_fname
-        DEM, post_DEM, envidata_DEM =  fct.ENVI_raster_binary_to_2d_array (basedir+DEM_fname)
-
-        print " Loading Marsh Platform"
-        # Make sure we have the right slope file name
-        marsh_fname = Sites[i] + "_Marsh.bil"
-        Marsh, post_Marsh, envidata_Marsh =  fct.ENVI_raster_binary_to_2d_array (basedir+marsh_fname)
+        marsh_fname = Sites['Region'].iloc[i] + str(Sites['Site'].iloc[i]) + "_Marsh.bil"
+        Marsh, post_Marsh, envidata_Marsh =  fct.ENVI_raster_binary_to_2d_array (DEM_dir + Sites['Region'].iloc[i] + '/' + str(Sites['Site'].iloc[i]) + '/' + marsh_fname)
 
         Marsh[Marsh == 0] = Nodata_value
         Marsh[Marsh > 0] = DEM[Marsh > 0]
@@ -578,26 +392,29 @@ def EGU_pdf (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data
         Marsh = Marsh[Marsh>Nodata_value]
 
 
-
-
         # Get spring Tidal range, defined here as q95 - q5
-        if os.path.isfile(tide_dir + Tide_sites[i] + "_Subsample.pkl"):
-            Tide = pickle.load( open(tide_dir + Tide_sites[i] + "_Subsample.pkl", "rb" ) )
+        if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"):
+            Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl", "rb" ) )
             Tha_tide = (Tide[:,1]).astype(np.float)
+            rt = ax1.violinplot(Tha_tide, [i], points=30, widths=0.3, showmeans=True, showextrema=False, showmedians=False)
 
-            rt = ax1.violinplot(Tha_tide, [i], points=20, widths=0.3, showmeans=True, showextrema=False, showmedians=False)
-
-
+            print "opened tide file:", tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"
 
         else:
             for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003"]:
-                if os.path.isfile(tide_dir + Tide_sites[i] + "_tides" + year + ".pkl"):
-                    Tide = pickle.load( open(tide_dir + Tide_sites[i] + "_tides" + year + ".pkl", "rb" ) )
+                if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl"):
+                    Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl", "rb" ) )
                     Tide["Tide_OD"] = Tide["Tide_OD"].astype(np.float)
                     Tide = Tide.loc[Tide["Tide_OD"] < 999]
                     Tha_tide = Tide["Tide_OD"]
                     Tha_tide =np.asarray(Tha_tide[Tha_tide > Nodata_value])
+                    print "opened tide file:", tide_dir + Sites['Tides'][i] + "_tides" + year + ".pkl"
                     break
+
+
+            else:
+                print "I didnt find a file to open"
+                quit()
 
             rt = ax1.violinplot(Tha_tide, [i], points=30, widths=0.3, showmeans=True, showextrema=False, showmedians=False)
 
@@ -619,15 +436,972 @@ def EGU_pdf (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data
             vp.set_alpha(0.8)
 
 
-
+        RSLR.append(Sites['Holo_SLR'].iloc[i])
         i+=1
 
 
+    ax2.bar(range(0,24,1), RSLR, 0.05, alpha=0.5, color='r')
 
-    ax1.set_ylim(ymin = -5, ymax = 9)
+    ax1.set_ylim(ymin = -8, ymax = 8)
+    ax1.set_xlim(xmin = -1, xmax = 25)
 
-    plt.savefig(figdir+'_EGU_pdf.png', bbox_inches='tight')
-    print 'Figure saved:' + figdir + '_EGU_pdf.png'
+    ax2.set_ylim(ymin = -2, ymax = 2)
+    ax2.set_xlim(xmin = -1, xmax = 25)
+
+
+    majorLocator1 = MultipleLocator(1)
+    ax1.xaxis.set_major_locator(majorLocator1)
+    ax1.set_xticklabels(x_labels)
+
+    ax1.plot([0,30],[0,0], color = 'k', linewidth = 0.4, alpha = 1.0)
+
+
+    ax1.annotate('Marsh platforms', fontsize = 16,
+         xy=(0.05, 0.15),
+         xycoords='axes fraction',color='green')
+
+    ax1.annotate('Tidal stages', fontsize = 16,
+         xy=(0.05, 0.10),
+         xycoords='axes fraction',color='blue')
+
+    ax1.annotate('Relative sea level rise during the Holocene', fontsize = 16,
+         xy=(0.05, 0.05),
+         xycoords='axes fraction',color='red')
+
+
+    plt.savefig(fig_dir+'_EGU_pdf.png', bbox_inches='tight')
+    print 'Figure saved:' + fig_dir + '_EGU_pdf.png'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+
+def EGU_site_prop (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
+            Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
+            Site = ["FEL"]):
+
+
+
+
+
+
+    basedir = "/home/willgoodwin/Data/"
+    DEM_dir = basedir + "UK_LiDAR/"
+    fig_dir = basedir + "EGU_figs/"
+    outdir = Input_dir + 'Output/'
+    metricsdir = outdir + 'Marsh_metrics/'
+
+    Sites = pickle.load( open(DEM_dir+'all_sites.pkl', "rb" ) )
+    site  = Input_dir[-6:-3] + Input_dir[-2]
+
+    tide_dir = basedir + "Tides/"
+    wave_dir = basedir + "Waves/"
+
+
+    #Plot 1: Draw the platform on a DEM, superimposed on a hillshade
+    Nodata_value = -1000
+
+
+    print 'Loading transects from Pickle'
+    Transects = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_Tr.pkl', "rb" ) )
+    Transects_mean = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_mean.pkl', "rb" ) )
+    Transects_stdev = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_stdev.pkl', "rb" ) )
+
+    Big_Transects = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_BigTr.pkl', "rb" ) )
+    Big_Transects_mean = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_Bigmean.pkl', "rb" ) )
+    Big_Transects_stdev = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_Bigstdev.pkl', "rb" ) )
+
+    #print Big_Transects_mean
+    #quit()
+
+
+    i = 0
+
+    # Get spring Tidal range, defined here as q95 - q5
+    if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"):
+        Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl", "rb" ) )
+        Tha_tide = (Tide[:,1]).astype(np.float)
+        print "opened tide file:", tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"
+
+    else:
+        for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003"]:
+            if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl"):
+                Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl", "rb" ) )
+                Tide["Tide_OD"] = Tide["Tide_OD"].astype(np.float)
+                Tide = Tide.loc[Tide["Tide_OD"] < 999]
+                Tha_tide = Tide["Tide_OD"]
+                Tha_tide =np.asarray(Tha_tide[Tha_tide > Nodata_value])
+                print "opened tide file:", tide_dir + Sites['Tides'][i] + "_tides" + year + ".pkl"
+                break
+        else:
+            print "I didnt find a file to open"
+            quit()
+
+    # Get mean Hs
+    for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003","201408","201409","201410","201411"]:
+        if os.path.isfile(wave_dir + Sites['Waves'].iloc[i] + "_waves" + year + ".pkl"):
+            print wave_dir + Sites['Waves'].iloc[i]  + "_waves" + year + ".pkl"
+            Wave = pickle.load( open(wave_dir + Sites['Waves'].iloc[i] + "_waves" + year + ".pkl", "rb" ) )
+            Wave["Hs"] = Wave["Hs"].astype(np.float)
+            break
+
+    Wavedir_mean = np.mean(Wave['Dirp'].astype(np.float))
+
+
+
+
+
+    fig_width = 20
+    fig_height = 20
+    fig=plt.figure('figname', facecolor='White',figsize=[fig_height,fig_width])
+
+
+    ax1 = plt.subplot2grid((2,2),(0,0),colspan=1, rowspan=1)
+    ax1.tick_params(axis='x', colors='black')
+    ax1.tick_params(axis='y', colors='black')
+    plt.ylabel('Elevation (m.a.m.s.l)', fontsize=26)
+    plt.xlabel('Transect length (m)', fontsize=26)
+    ax1.annotate('a.', fontsize = 20, xy=(0.95, 0.05), xycoords='axes fraction',color='black')
+
+    ax2 = plt.subplot2grid((2,2),(0,1),colspan=1, rowspan=1)
+    ax2.tick_params(axis='x', colors='black')
+    ax2.tick_params(axis='y', colors='black')
+    plt.ylabel('Slope', fontsize=26)
+    plt.xlabel('Transect length (m)', fontsize=26)
+    ax2.annotate('b.', fontsize = 20, xy=(0.95, 0.05), xycoords='axes fraction',color='black')
+
+    ax3 = plt.subplot2grid((2,2),(1,0),colspan=2, rowspan=1, projection='polar')
+    ax3.set_title('Transect relief and direction', fontsize = 26)
+    ax3.tick_params(axis='x', colors='black')
+    ax3.tick_params(axis='y', colors='black')
+    #plt.xlabel('x (m)', fontsize=26)
+    #plt.ylabel('y (m)', fontsize=26)
+    ax3.annotate('c.', fontsize = 20, xy=(0.95, 0.05), xycoords='axes fraction',color='black')
+
+    ax3.set_theta_zero_location('N')
+    ax3.set_theta_direction(-1)
+
+
+
+
+    # Draw the lines, panda style
+    A_mean = []
+    B_mean = []
+    colour = 0
+    for i in range(len(Transects)):
+        Pandaline = Transects[i]
+        if Pandaline.size > 0:
+            colour+=1
+            L_labels = range (1,max(Pandaline['L_code'])+1)
+            for L in L_labels:
+                Pandaline_slice = Pandaline.loc[Pandaline['L_code'] == L]
+                #print Pandaline_slice
+                if Pandaline_slice.size > 0:
+                    T_labels = range (1,max(Pandaline_slice['T_code'])+1)
+                    for T in T_labels:
+                        Pandaline_zest = Pandaline_slice.loc[Pandaline_slice['T_code'] == T]
+
+                        if Pandaline_zest['select'].iloc[0] == True:
+                            colour = 250 * (Pandaline_zest['bear'].iloc[1] - Wavedir_mean) / 360
+                            colour2 = (Pandaline_zest['Z'].iloc[0] - Pandaline_zest['Z'].iloc[20])
+                            #print colour2
+                            #print colour
+                            ax1.plot(Pandaline_zest['Z'], color = 'k', alpha = 0.5, linewidth = 0.3)
+                            ax2.plot(Pandaline_zest['dZ'], color = 'k', alpha = 0.5, linewidth = 0.3)
+
+                            #if (Pandaline_zest['bear'].iloc[1]-Wavedir_mean) < 45:
+                            #if (Pandaline_zest['bear'].iloc[1]-Wavedir_mean) > -45:
+                            print Pandaline_zest['rowcol'].iloc[1]
+                            print Pandaline_zest['rowcol'].iloc[20]
+                            A =  Pandaline_zest['bear'].iloc[1]; A_mean.append(A)
+                            B =  colour2; B_mean.append(B)
+                            bars = ax3.bar(Pandaline_zest['bear'].iloc[1], colour2, width=0.01, bottom=0.0, color = 'k', alpha  = 1)
+
+    ax1.plot(Big_Transects_mean['Z'], color = 'r', alpha = 1., linewidth = 2)
+    ax2.plot(Big_Transects_mean['dZ'], color = 'r', alpha = 1., linewidth = 2)
+    barsmean = ax3.bar(np.percentile(A_mean,50), np.mean(B_mean), width=0.05, bottom=0.0, color = 'r', alpha  = 1)
+
+
+
+
+
+
+
+
+
+    plt.savefig(fig_dir + site + '_SITE_PROP.png', bbox_inches='tight')
+
+
+
+
+
+
+
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+
+
+def EGU_masterplot (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
+            Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
+            Site = ["FEL"]):
+
+    basedir = "/home/willgoodwin/Data/"
+    DEM_dir = basedir + "UK_LiDAR/"
+    fig_dir = basedir + "EGU_figs/"
+    outdir = Input_dir + 'Output/'
+    metricsdir = outdir + 'Marsh_metrics/'
+
+    Sites = pickle.load( open(DEM_dir+'all_sites.pkl', "rb" ) )
+
+    tide_dir = basedir + "Tides/"
+    wave_dir = basedir + "Waves/"
+
+
+    #Plot 1: Draw the platform on a DEM, superimposed on a hillshade
+    Nodata_value = -1000
+
+
+
+
+    fig_width = 55
+    fig_height = 20
+    fig=plt.figure('figname', facecolor='White',figsize=[fig_width,fig_height])
+
+    ax1 = plt.subplot2grid((2,1),(0,0),colspan=1, rowspan=1)
+    ax1.tick_params(axis='x', colors='black')
+    ax1.tick_params(axis='y', colors='black')
+    #plt.xlabel('Site', fontsize=22)
+    plt.ylabel('Elevation (m)', fontsize=22)
+    ax1.annotate('a.', fontsize = 20, xy=(0.01, 0.95), xycoords='axes fraction',color='black')
+
+    ax2 = ax1.twinx()
+    ax2.tick_params(axis='x', colors='black')
+    ax2.tick_params(axis='y', colors='black')
+    #plt.xlabel('Site', fontsize=18)
+    plt.ylabel('Mean regional Hs (m)', fontsize=22)
+
+
+    ax3 = plt.subplot2grid((2,1),(1,0),colspan=1, rowspan=1)
+    ax3.tick_params(axis='x', colors='black')
+    ax3.tick_params(axis='y', colors='black')
+    plt.xlabel('Site', fontsize=22)
+    plt.ylabel('Transect distance (m)', fontsize=22)
+    ax3.annotate('b.', fontsize = 20, xy=(0.01, 0.95), xycoords='axes fraction',color='black')
+
+
+    Hs_mean = [0,0]
+    x_labels = [0,0]
+
+
+    for i in range (len (Sites)):
+
+        site  = Sites['Region'].iloc[i]+str(Sites['Site'].iloc[i])
+
+        x_labels.append(Sites['Region'].iloc[i]+str(Sites['Site'].iloc[i]))
+
+
+        print 'Loading transects from Pickle'
+
+        load_dir = DEM_dir + Sites['Region'].iloc[i] + '/' + str(Sites['Site'].iloc[i]) + '/' + 'Output/'
+
+        Transects = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_Tr.pkl', "rb" ) )
+        Transects_mean = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_mean.pkl', "rb" ) )
+        Transects_stdev = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_stdev.pkl', "rb" ) )
+
+        Big_Transects = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_BigTr.pkl', "rb" ) )
+        Big_Transects_mean = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_Bigmean.pkl', "rb" ) )
+        Big_Transects_stdev = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_Bigstdev.pkl', "rb" ) )
+
+
+        ax3.plot(Big_Transects_mean['dZ'].iloc[0:11]+i, range(0,11),color = 'g', linewidth = 2)
+        ax3.plot(Big_Transects_mean['dZ'].iloc[10:20]+i, range(10,20),color = 'k', linewidth = 2)
+
+
+        # Get spring Tidal range, defined here as q95 - q5
+        if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"):
+            Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl", "rb" ) )
+            Tha_tide = (Tide[:,1]).astype(np.float)
+            rt = ax1.violinplot(Tha_tide, [i], points=30, widths=0.3, showmeans=False, showextrema=False, showmedians=False)
+            print "opened tide file:", tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"
+
+        else:
+            for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003"]:
+                if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl"):
+                    Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl", "rb" ) )
+                    Tide["Tide_OD"] = Tide["Tide_OD"].astype(np.float)
+                    Tide = Tide.loc[Tide["Tide_OD"] < 999]
+                    Tha_tide = Tide["Tide_OD"]
+                    Tha_tide =np.asarray(Tha_tide[Tha_tide > Nodata_value])
+                    print "opened tide file:", tide_dir + Sites['Tides'][i] + "_tides" + year + ".pkl"
+                    break
+            else:
+                print "I didnt find a file to open"
+                quit()
+            rt = ax1.violinplot(Tha_tide, [i], points=30, widths=0.3, showmeans=True, showextrema=False, showmedians=False)
+
+        #rt['cmeans'].set_color('b')
+        for vp in rt['bodies']:
+            vp.set_facecolor('b')
+            #vp.set_edgecolor(rrred)
+            #vp.set_linewidth(1)
+            vp.set_alpha(0.3)
+
+
+        # Get mean Hs
+        for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003","201408","201409","201410","201411"]:
+            if os.path.isfile(wave_dir + Sites['Waves'].iloc[i] + "_waves" + year + ".pkl"):
+                print wave_dir + Sites['Waves'].iloc[i]  + "_waves" + year + ".pkl"
+                Wave = pickle.load( open(wave_dir + Sites['Waves'].iloc[i] + "_waves" + year + ".pkl", "rb" ) )
+                Wave["Hs"] = Wave["Hs"].astype(np.float)
+                break
+
+        Wavedir_mean = 2*np.pi * np.mean(Wave['Dirp'].astype(np.float)) / 360
+
+        Hs_mean = np.mean(Wave['Hs'])
+
+
+
+
+        Draw = Big_Transects.loc[Big_Transects['select']==True]
+
+        Draw_wide = Draw.loc[Draw['bear']<Wavedir_mean + 2*np.pi]
+        Draw_wide = Draw_wide.loc[Draw_wide['bear']>Wavedir_mean - 2*np.pi]
+
+        Draw_narr = Draw.loc[Draw['bear']<Wavedir_mean + np.pi/2]
+        Draw_narr = Draw_narr.loc[Draw_narr['bear']>Wavedir_mean - np.pi/2]
+
+        #print len(Draw_wide)
+        #print len(Draw_narr)
+
+        colour = plt.cm.jet(plt.cm.jet(Sites['Type'].iloc[i]*50))
+
+        #if len(Draw_narr) > 0:
+
+        #print Draw_wide
+
+        r = ax1.violinplot(np.asarray(Draw['Z'].loc[1]), [i], points=30, widths=0.3, showmeans=True, showextrema=False, showmedians=False)#, colour = plt.cm.jet(TR/10))
+        r['cmeans'].set_color('k')
+        for vp in r['bodies']:
+            vp.set_facecolor('g')
+            #vp.set_edgecolor(rrred)
+            #vp.set_linewidth(1)
+            vp.set_alpha(0.8)
+
+        rr = ax1.violinplot(np.asarray(Draw['Z'].loc[20]), [i], points=30, widths=0.3, showmeans=True, showextrema=False, showmedians=False)#, colour = plt.cm.jet(TR/10))
+        rr['cmeans'].set_color('k')
+        for vp in rr['bodies']:
+            vp.set_facecolor('k')
+            #vp.set_edgecolor(rrred)
+            #vp.set_linewidth(1)
+            vp.set_alpha(0.8)
+
+        """rs = ax1.violinplot(np.asarray(Draw_wide['Z'].loc[1]), [i+0.25], points=20, widths=0.2, showmeans=True, showextrema=False, showmedians=False)
+        rs['cmeans'].set_color('k')
+        for vp in rs['bodies']:
+            vp.set_facecolor('r')
+            #vp.set_edgecolor(rrred)
+            #vp.set_linewidth(1)
+            vp.set_alpha(0.6)
+        re = ax1.violinplot(np.asarray(Draw_wide['Z'].loc[20]), [i+0.25], points=20, widths=0.2, showmeans=True, showextrema=False, showmedians=False)
+        re['cmeans'].set_color('k')
+        for vp in re['bodies']:
+            vp.set_facecolor('r')
+            #vp.set_edgecolor(rrred)
+            #vp.set_linewidth(1)
+            vp.set_alpha(0.6)
+
+
+        rs2 = ax1.violinplot(np.asarray(Draw_narr['Z'].loc[1]), [i+0.5], points=20, widths=0.2, showmeans=True, showextrema=False, showmedians=False)
+        rs2['cmeans'].set_color('k')
+        for vp in rs2['bodies']:
+            vp.set_facecolor('r')
+            #vp.set_edgecolor(rrred)
+            #vp.set_linewidth(1)
+            vp.set_alpha(0.6)
+
+        re2 = ax1.violinplot(np.asarray(Draw_narr['Z'].loc[20]), [i+0.5], points=20, widths=0.2, showmeans=True, showextrema=False, showmedians=False)
+        re2['cmeans'].set_color('k')
+        for vp in re2['bodies']:
+            vp.set_facecolor('r')
+            #vp.set_edgecolor(rrred)
+            #vp.set_linewidth(1)
+            vp.set_alpha(0.6)"""
+
+
+
+
+
+
+
+
+        ax2.bar(i, Hs_mean, 0.05, alpha=0.5, color='r')
+
+    ax1.set_ylim(ymin = -6, ymax = 8)
+    #ax1.set_xlim(xmin = -1, xmax = 25)
+
+    #ax2.set_ylim(ymin = -2, ymax = 2)
+    #ax2.set_xlim(xmin = -1, xmax = 25)
+
+
+    majorLocator1 = MultipleLocator(1)
+    ax1.xaxis.set_major_locator(majorLocator1)
+    ax1.set_xticklabels(x_labels)
+
+    ax3.xaxis.set_major_locator(majorLocator1)
+    ax3.set_xticklabels(x_labels)
+
+    """ax1.plot([0,30],[0,0], color = 'k', linewidth = 0.4, alpha = 1.0)
+
+
+    ax1.annotate('Marsh platforms', fontsize = 16,
+         xy=(0.05, 0.15),
+         xycoords='axes fraction',color='green')
+
+    ax1.annotate('Tidal stages', fontsize = 16,
+         xy=(0.05, 0.10),
+         xycoords='axes fraction',color='blue')
+
+    ax1.annotate('Relative sea level rise during the Holocene', fontsize = 16,
+         xy=(0.05, 0.05),
+
+         xycoords='axes fraction',color='red')"""
+
+
+    ax1.annotate('Marsh platforms', fontsize = 16,
+         xy=(0.01, 0.18),
+         xycoords='axes fraction',color='green')
+
+
+    ax1.annotate('Tidal flats', fontsize = 16,
+         xy=(0.01, 0.13),
+         xycoords='axes fraction',color='black')
+
+    ax1.annotate('Tidal stages', fontsize = 16,
+         xy=(0.01, 0.08),
+         xycoords='axes fraction',color='blue')
+
+    ax1.annotate('Significant wave height', fontsize = 16,
+         xy=(0.01, 0.03),
+         xycoords='axes fraction',color='red')
+
+
+    plt.savefig(fig_dir+'EGU_master.png', bbox_inches='tight')
+    print 'Figure saved:' + fig_dir + 'EGU_master.png'
+
+
+
+
+
+""" ADD THE ROSES?"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+
+
+def EGU_masterplot2 (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
+            Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
+            Site = ["FEL"]):
+
+    basedir = "/home/willgoodwin/Data/"
+    DEM_dir = basedir + "UK_LiDAR/"
+    fig_dir = basedir + "EGU_figs/"
+    outdir = Input_dir + 'Output/'
+    metricsdir = outdir + 'Marsh_metrics/'
+
+    Sites = pickle.load( open(DEM_dir+'all_sites.pkl', "rb" ) )
+
+    tide_dir = basedir + "Tides/"
+    wave_dir = basedir + "Waves/"
+
+
+    #Plot 1: Draw the platform on a DEM, superimposed on a hillshade
+    Nodata_value = -1000
+
+
+
+
+    fig_width = 55
+    fig_height = 15
+    fig=plt.figure('figname', facecolor='White',figsize=[fig_width,fig_height])
+
+    ax1 = plt.subplot2grid((1,1),(0,0),colspan=1, rowspan=1)
+    ax1.tick_params(axis='x', colors='black')
+    ax1.tick_params(axis='y', colors='black')
+    plt.xlabel('Site', fontsize=22)
+    plt.ylabel('Elevation (m)', fontsize=22)
+
+    ax2 = ax1.twinx()
+    ax2.tick_params(axis='x', colors='black')
+    ax2.tick_params(axis='y', colors='black')
+    #plt.xlabel('Site', fontsize=18)
+    plt.ylabel('RSLR (mm/yr)', fontsize=22)
+
+
+    Hs_mean = [0,0]
+
+
+    for i in range (len (Sites)):
+
+        site  = Sites['Region'].iloc[i]+str(Sites['Site'].iloc[i])
+
+
+
+
+        print 'Loading transects from Pickle'
+
+        load_dir = DEM_dir + Sites['Region'].iloc[i] + '/' + str(Sites['Site'].iloc[i]) + '/' + 'Output/'
+
+        Transects = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_Tr.pkl', "rb" ) )
+        Transects_mean = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_mean.pkl', "rb" ) )
+        Transects_stdev = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_stdev.pkl', "rb" ) )
+
+        Big_Transects = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_BigTr.pkl', "rb" ) )
+        Big_Transects_mean = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_Bigmean.pkl', "rb" ) )
+        Big_Transects_stdev = pickle.load( open(load_dir+'Marsh_metrics/'+str(site)+'_Bigstdev.pkl', "rb" ) )
+
+
+        # Get spring Tidal range, defined here as q95 - q5
+        if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"):
+            Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl", "rb" ) )
+            Tha_tide = (Tide[:,1]).astype(np.float)
+            rt = ax1.violinplot(Tha_tide, [i], points=30, widths=0.3, showmeans=False, showextrema=False, showmedians=False)
+            print "opened tide file:", tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"
+
+        else:
+            for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003"]:
+                if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl"):
+                    Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl", "rb" ) )
+                    Tide["Tide_OD"] = Tide["Tide_OD"].astype(np.float)
+                    Tide = Tide.loc[Tide["Tide_OD"] < 999]
+                    Tha_tide = Tide["Tide_OD"]
+                    Tha_tide =np.asarray(Tha_tide[Tha_tide > Nodata_value])
+                    print "opened tide file:", tide_dir + Sites['Tides'][i] + "_tides" + year + ".pkl"
+                    break
+            else:
+                print "I didnt find a file to open"
+                quit()
+            rt = ax1.violinplot(Tha_tide, [i], points=30, widths=0.3, showmeans=True, showextrema=False, showmedians=False)
+
+        #rt['cmeans'].set_color('b')
+        for vp in rt['bodies']:
+            vp.set_facecolor('b')
+            #vp.set_edgecolor(rrred)
+            #vp.set_linewidth(1)
+            vp.set_alpha(0.3)
+
+
+        # Get mean Hs
+        for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003","201408","201409","201410","201411"]:
+            if os.path.isfile(wave_dir + Sites['Waves'].iloc[i] + "_waves" + year + ".pkl"):
+                print wave_dir + Sites['Waves'].iloc[i]  + "_waves" + year + ".pkl"
+                Wave = pickle.load( open(wave_dir + Sites['Waves'].iloc[i] + "_waves" + year + ".pkl", "rb" ) )
+                Wave["Hs"] = Wave["Hs"].astype(np.float)
+                break
+
+        Wavedir_mean = 2*np.pi * np.mean(Wave['Dirp'].astype(np.float)) / 360
+
+        Hs_mean = np.mean(Wave['Hs'])
+
+
+
+
+        Draw = Big_Transects.loc[Big_Transects['select']==True]
+
+        Draw_wide = Draw.loc[Draw['bear']<Wavedir_mean + 2*np.pi]
+        Draw_wide = Draw_wide.loc[Draw_wide['bear']>Wavedir_mean - 2*np.pi]
+
+        Draw_narr = Draw.loc[Draw['bear']<Wavedir_mean + np.pi/2]
+        Draw_narr = Draw_narr.loc[Draw_narr['bear']>Wavedir_mean - np.pi/2]
+
+        print len(Draw_wide)
+        print len(Draw_narr)
+
+        colour = plt.cm.jet(plt.cm.jet(Sites['Type'].iloc[i]*50))
+
+        if len(Draw_narr) > 0:
+
+            #print Draw_wide
+
+            r = ax1.violinplot(np.asarray(Draw['Z'].loc[1]), [i-0.25], points=20, widths=0.2, showmeans=True, showextrema=False, showmedians=False)#, colour = plt.cm.jet(TR/10))
+            r['cmeans'].set_color('k')
+            for vp in r['bodies']:
+                vp.set_facecolor(colour)
+                #vp.set_edgecolor(rrred)
+                #vp.set_linewidth(1)
+                vp.set_alpha(0.3)
+
+            rr = ax1.violinplot(np.asarray(Draw['Z'].loc[20]), [i-0.25], points=20, widths=0.2, showmeans=True, showextrema=False, showmedians=False)#, colour = plt.cm.jet(TR/10))
+            rr['cmeans'].set_color('k')
+            for vp in rr['bodies']:
+                vp.set_facecolor(colour)
+                #vp.set_edgecolor(rrred)
+                #vp.set_linewidth(1)
+                vp.set_alpha(0.3)
+
+            rs = ax1.violinplot(np.asarray(Draw_wide['Z'].loc[1]), [i+0.25], points=20, widths=0.2, showmeans=True, showextrema=False, showmedians=False)
+            rs['cmeans'].set_color('k')
+            for vp in rs['bodies']:
+                vp.set_facecolor('r')
+                #vp.set_edgecolor(rrred)
+                #vp.set_linewidth(1)
+                vp.set_alpha(0.6)
+            re = ax1.violinplot(np.asarray(Draw_wide['Z'].loc[20]), [i+0.25], points=20, widths=0.2, showmeans=True, showextrema=False, showmedians=False)
+            re['cmeans'].set_color('k')
+            for vp in re['bodies']:
+                vp.set_facecolor('r')
+                #vp.set_edgecolor(rrred)
+                #vp.set_linewidth(1)
+                vp.set_alpha(0.6)
+
+
+            rs2 = ax1.violinplot(np.asarray(Draw_narr['Z'].loc[1]), [i+0.5], points=20, widths=0.2, showmeans=True, showextrema=False, showmedians=False)
+            rs2['cmeans'].set_color('k')
+            for vp in rs2['bodies']:
+                vp.set_facecolor('r')
+                #vp.set_edgecolor(rrred)
+                #vp.set_linewidth(1)
+                vp.set_alpha(0.6)
+
+            re2 = ax1.violinplot(np.asarray(Draw_narr['Z'].loc[20]), [i+0.5], points=20, widths=0.2, showmeans=True, showextrema=False, showmedians=False)
+            re2['cmeans'].set_color('k')
+            for vp in re2['bodies']:
+                vp.set_facecolor('r')
+                #vp.set_edgecolor(rrred)
+                #vp.set_linewidth(1)
+                vp.set_alpha(0.6)
+
+
+
+
+
+
+
+
+        ax2.bar(i, Hs_mean, 0.05, alpha=0.5, color='r')
+
+    ax1.set_ylim(ymin = -8, ymax = 8)
+    #ax1.set_xlim(xmin = -1, xmax = 25)
+
+    #ax2.set_ylim(ymin = -2, ymax = 2)
+    #ax2.set_xlim(xmin = -1, xmax = 25)
+
+
+    """majorLocator1 = MultipleLocator(1)
+    ax1.xaxis.set_major_locator(majorLocator1)
+    ax1.set_xticklabels(x_labels)
+
+    ax1.plot([0,30],[0,0], color = 'k', linewidth = 0.4, alpha = 1.0)
+
+
+    ax1.annotate('Marsh platforms', fontsize = 16,
+         xy=(0.05, 0.15),
+         xycoords='axes fraction',color='green')
+
+    ax1.annotate('Tidal stages', fontsize = 16,
+         xy=(0.05, 0.10),
+         xycoords='axes fraction',color='blue')
+
+    ax1.annotate('Relative sea level rise during the Holocene', fontsize = 16,
+         xy=(0.05, 0.05),
+         xycoords='axes fraction',color='red')"""
+
+
+    plt.savefig(fig_dir+'EGU_master.png', bbox_inches='tight')
+    print 'Figure saved:' + fig_dir + 'EGU_master.png'
+
+
+
+
+
+"""MAYBE JUST SWITCH TO AVERAGE PROFILES AND SLOPES AS WELL AS AVERAGE ANGLE TO WAVE OR CURRENT."""
+
+
+
+
+"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""
+
+
+
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+
+def EGU_site_prop2 (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
+            Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
+            Site = ["FEL"]):
+
+
+
+
+
+
+    basedir = "/home/willgoodwin/Data/"
+    DEM_dir = basedir + "UK_LiDAR/"
+    fig_dir = basedir + "EGU_figs/"
+    outdir = Input_dir + 'Output/'
+    metricsdir = outdir + 'Marsh_metrics/'
+
+    Sites = pickle.load( open(DEM_dir+'all_sites.pkl', "rb" ) )
+    site  = Input_dir[-6:-3] + Input_dir[-2]
+
+    tide_dir = basedir + "Tides/"
+    wave_dir = basedir + "Waves/"
+
+
+    #Plot 1: Draw the platform on a DEM, superimposed on a hillshade
+    Nodata_value = -1000
+
+
+    print 'Loading transects from Pickle'
+    Transects = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_Tr.pkl', "rb" ) )
+    Transects_mean = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_mean.pkl', "rb" ) )
+    Transects_stdev = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_stdev.pkl', "rb" ) )
+
+    Big_Transects = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_BigTr.pkl', "rb" ) )
+    Big_Transects_mean = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_Bigmean.pkl', "rb" ) )
+    Big_Transects_stdev = pickle.load( open(outdir+'Marsh_metrics/'+str(site)+'_Bigstdev.pkl', "rb" ) )
+
+    #print Big_Transects_mean
+    #quit()
+
+
+    i = 0
+
+    # Get spring Tidal range, defined here as q95 - q5
+    if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"):
+        Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl", "rb" ) )
+        Tha_tide = (Tide[:,1]).astype(np.float)
+        print "opened tide file:", tide_dir + Sites['Tides'].iloc[i] + "_Subsample.pkl"
+
+    else:
+        for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003"]:
+            if os.path.isfile(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl"):
+                Tide = pickle.load( open(tide_dir + Sites['Tides'].iloc[i] + "_tides" + year + ".pkl", "rb" ) )
+                Tide["Tide_OD"] = Tide["Tide_OD"].astype(np.float)
+                Tide = Tide.loc[Tide["Tide_OD"] < 999]
+                Tha_tide = Tide["Tide_OD"]
+                Tha_tide =np.asarray(Tha_tide[Tha_tide > Nodata_value])
+                print "opened tide file:", tide_dir + Sites['Tides'][i] + "_tides" + year + ".pkl"
+                break
+        else:
+            print "I didnt find a file to open"
+            quit()
+
+    # Get mean Hs
+    for year in ["2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004","2003","201408","201409","201410","201411"]:
+        if os.path.isfile(wave_dir + Sites['Waves'].iloc[i] + "_waves" + year + ".pkl"):
+            print wave_dir + Sites['Waves'].iloc[i]  + "_waves" + year + ".pkl"
+            Wave = pickle.load( open(wave_dir + Sites['Waves'].iloc[i] + "_waves" + year + ".pkl", "rb" ) )
+            Wave["Hs"] = Wave["Hs"].astype(np.float)
+            break
+
+    Wavedir_mean = np.mean(Wave['Dirp'].astype(np.float))
+
+
+
+
+
+    fig_width = 20
+    fig_height = 20
+    fig=plt.figure('figname', facecolor='White',figsize=[fig_height,fig_width])
+
+
+    ax1 = plt.subplot2grid((2,2),(0,0),colspan=1, rowspan=1)
+    ax1.tick_params(axis='x', colors='black')
+    ax1.tick_params(axis='y', colors='black')
+    plt.ylabel('Elevation (m.a.m.s.l)', fontsize=26)
+    plt.xlabel('Transect length (m)', fontsize=26)
+    ax1.annotate('a.', fontsize = 20, xy=(0.95, 0.05), xycoords='axes fraction',color='black')
+
+    ax2 = plt.subplot2grid((2,2),(0,1),colspan=1, rowspan=1)
+    ax2.tick_params(axis='x', colors='black')
+    ax2.tick_params(axis='y', colors='black')
+    plt.ylabel('Slope', fontsize=26)
+    plt.xlabel('Transect length (m)', fontsize=26)
+    ax2.annotate('b.', fontsize = 20, xy=(0.95, 0.05), xycoords='axes fraction',color='black')
+
+    ax3 = plt.subplot2grid((2,2),(1,0),colspan=2, rowspan=1, projection='polar')
+    ax3.set_title('Transect relief and direction', fontsize = 26)
+    ax3.tick_params(axis='x', colors='black')
+    ax3.tick_params(axis='y', colors='black')
+    #plt.xlabel('x (m)', fontsize=26)
+    #plt.ylabel('y (m)', fontsize=26)
+    ax3.annotate('c.', fontsize = 20, xy=(0.95, 0.05), xycoords='axes fraction',color='black')
+
+    ax3.set_theta_zero_location('N')
+    ax3.set_theta_direction(-1)
+
+
+
+
+    # Draw the lines, panda style
+    colour = 0
+    for i in range(len(Transects)):
+        Pandaline = Transects[i]
+        if Pandaline.size > 0:
+            colour+=1
+            L_labels = range (1,max(Pandaline['L_code'])+1)
+            for L in L_labels:
+                Pandaline_slice = Pandaline.loc[Pandaline['L_code'] == L]
+                #print Pandaline_slice
+                if Pandaline_slice.size > 0:
+                    T_labels = range (1,max(Pandaline_slice['T_code'])+1)
+                    for T in T_labels:
+                        Pandaline_zest = Pandaline_slice.loc[Pandaline_slice['T_code'] == T]
+
+                        if Pandaline_zest['select'].iloc[0] == True:
+                            colour = 250 * (Pandaline_zest['bear'].iloc[1] - Wavedir_mean) / 360
+                            colour2 = (Pandaline_zest['Z'].iloc[0] - Pandaline_zest['Z'].iloc[20])
+                            #print colour2
+                            #print colour
+                            ax1.plot(Pandaline_zest['Z'], color = 'k', alpha = 0.5, linewidth = 0.3)
+                            ax2.plot(Pandaline_zest['dZ'], color = 'k', alpha = 0.5, linewidth = 0.3)
+
+                            #if (Pandaline_zest['bear'].iloc[1]-Wavedir_mean) < 45:
+                            #if (Pandaline_zest['bear'].iloc[1]-Wavedir_mean) > -45:
+                            print Pandaline_zest['rowcol'].iloc[1]-Wavedir_mean
+                            print Pandaline_zest['rowcol'].iloc[20]-Wavedir_mean
+                            print Pandaline_zest['bear'].iloc[1]-Wavedir_mean
+                            bars = ax3.bar(Pandaline_zest['bear'].iloc[1], colour2, width=0.01, bottom=0.0, color = 'k', alpha  = 1)
+
+                            break
+            #break
+
+    ax1.plot(Big_Transects_mean['Z'], color = 'r', alpha = 1., linewidth = 2)
+    ax2.plot(Big_Transects_mean['dZ'], color = 'r', alpha = 1., linewidth = 2)
+    barsmean = ax3.bar(Big_Transects_mean['bear'].iloc[1], 3, width=0.05, bottom=0.0, color = 'r', alpha  = 1)
+
+
+
+
+
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+
+
+def Rose (Input_dir =  "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
+            Output_dir = "/LSDTopoTools/LSDTopoTools_MarshPlatform/Example_data/",
+            Site = ["FEL"]):
+
+    basedir = "/home/willgoodwin/Data/"
+    DEM_dir = basedir + "UK_LiDAR/"
+    fig_dir = basedir + "EGU_figs/"
+    outdir = Input_dir + 'Output/'
+    metricsdir = outdir + 'Marsh_metrics/'
+
+    tide_dir = basedir + "Tides/"
+
+    Sites = pickle.load( open(DEM_dir+'all_sites.pkl', "rb" ) )
+
+    import plotly.plotly as py
+    import plotly.graph_objs as go
+
+    trace1 = go.Area(
+        r=[77.5, 72.5, 70.0, 45.0, 22.5, 42.5, 40.0, 62.5],
+        t=['North', 'N-E', 'East', 'S-E', 'South', 'S-W', 'West', 'N-W'],
+        name='11-14 m/s',
+        marker=dict(
+            color='rgb(106,81,163)'
+        )
+    )
+    trace2 = go.Area(
+        r=[57.49999999999999, 50.0, 45.0, 35.0, 20.0, 22.5, 37.5, 55.00000000000001],
+        t=['North', 'N-E', 'East', 'S-E', 'South', 'S-W', 'West', 'N-W'],
+        name='8-11 m/s',
+        marker=dict(
+            color='rgb(158,154,200)'
+        )
+    )
+    trace3 = go.Area(
+        r=[40.0, 30.0, 30.0, 35.0, 7.5, 7.5, 32.5, 40.0],
+        t=['North', 'N-E', 'East', 'S-E', 'South', 'S-W', 'West', 'N-W'],
+        name='5-8 m/s',
+        marker=dict(
+            color='rgb(203,201,226)'
+        )
+    )
+    trace4 = go.Area(
+        r=[20.0, 7.5, 15.0, 22.5, 2.5, 2.5, 12.5, 22.5],
+        t=['North', 'N-E', 'East', 'S-E', 'South', 'S-W', 'West', 'N-W'],
+        name='< 5 m/s',
+        marker=dict(
+            color='rgb(242,240,247)'
+        )
+    )
+    data = [trace1, trace2, trace3, trace4]
+    layout = go.Layout(
+        title='Wind Speed Distribution in Laurel, NE',
+        font=dict(
+            size=16
+        ),
+        legend=dict(
+            font=dict(
+                size=16
+            )
+        ),
+        radialaxis=dict(
+            ticksuffix='%'
+        ),
+        orientation=270
+    )
+    fig = go.Figure(data=data, layout=layout)
+    plt.savefig(fig_dir + '0_ROSE.png', bbox_inches='tight')
+
+
+
 
 
 
@@ -796,6 +1570,26 @@ def Plot_transects_hs_and_profiles (Input_dir =  "/LSDTopoTools/LSDTopoTools_Mar
         cb2.set_label('Platform number', fontsize=18)
 
         plt.savefig(figdir+site+'_Combined_Tr.png', bbox_inches='tight')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
